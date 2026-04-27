@@ -1,0 +1,25 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Folder Include="Kafka\" />
+    <Folder Include="Idempotency\" />
+    <Folder Include="Outbox\" />
+    <Folder Include="Persistence\Db\" />
+    <Folder Include="Persistence\Configurations\" />
+    <Folder Include="Persistence\Migrations\" />
+    <Folder Include="Redis\" />
+    <Folder Include="Repositories\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\HotelReservationSystem.Application\HotelReservationSystem.Application.csproj" />
+    <ProjectReference Include="..\HotelReservationSystem.Domain\HotelReservationSystem.Domain.csproj" />
+  </ItemGroup>
+
+</Project>

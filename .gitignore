@@ -1,0 +1,89 @@
+# =========================
+# 🧠 Visual Studio
+# =========================
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# =========================
+# 🏗️ Build Outputs
+# =========================
+bin/
+obj/
+out/
+publish/
+
+# =========================
+# 📦 .NET
+# =========================
+*.dll
+*.exe
+*.pdb
+*.cache
+*.log
+
+# =========================
+# 🔐 Secrets / Env
+# =========================
+.env
+.env.*
+appsettings.Development.json
+appsettings.Local.json
+
+# Keep template
+!.env.example
+
+# =========================
+# 🐳 Docker
+# =========================
+docker-compose.override.yml
+
+# =========================
+# 🗄️ Database / Local Files
+# =========================
+*.mdf
+*.ldf
+*.ndf
+
+# =========================
+# 🧪 Test / Coverage
+# =========================
+TestResults/
+*.trx
+coverage/
+coverage.cobertura.xml
+
+# =========================
+# 📦 Node (for k6 or tools)
+# =========================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# =========================
+# 🖥️ OS Files
+# =========================
+.DS_Store
+Thumbs.db
+
+# =========================
+# 🧾 Logs
+# =========================
+logs/
+*.log
+
+# =========================
+# 🔧 Rider / VSCode
+# =========================
+.idea/
+.vscode/
+
+# =========================
+# 📁 Temp
+# =========================
+*.tmp
+*.temp
+*.bak
