@@ -24,7 +24,7 @@ namespace HotelReservationSystem.API.Middlewares
             }
             catch (Exception ex)
             {
-                Log.Error(ex, "Unhandled exception occurred");
+                Log.Error(ex, "Error occurred while processing request {Path}", context.Request.Path);
                 await HandleExceptionAsync(context, ex);
             }
         }

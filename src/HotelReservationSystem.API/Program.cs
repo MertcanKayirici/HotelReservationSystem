@@ -43,6 +43,9 @@ if (app.Environment.IsDevelopment())
 // Exception middleware
 app.UseMiddleware<ExceptionMiddleware>();
 
+app.UseMiddleware<RequestLoggingMiddleware>();
+app.UseMiddleware<ExceptionMiddleware>();
+
 app.UseHttpsRedirection();
 
 app.UseAuthorization();
