@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.Http;
 using System;
+using Serilog;
 using System.Net;
 using System.Text.Json;
 using System.Threading.Tasks;
@@ -23,6 +24,7 @@ namespace HotelReservationSystem.API.Middlewares
             }
             catch (Exception ex)
             {
+                Log.Error(ex, "Unhandled exception occurred");
                 await HandleExceptionAsync(context, ex);
             }
         }

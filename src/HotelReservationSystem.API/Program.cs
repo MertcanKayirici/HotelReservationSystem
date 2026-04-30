@@ -1,12 +1,23 @@
-using HotelReservationSystem.Application.Interfaces;
+﻿using HotelReservationSystem.Application.Interfaces;
 using HotelReservationSystem.Application.Services;
 using HotelReservationSystem.Application.Interfaces.Repositories;
 using HotelReservationSystem.Infrastructure.Repositories;
 using HotelReservationSystem.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using HotelReservationSystem.API.Middlewares;
+using Serilog;
+
+// 1. SERILOG CONFIG (builder'dan önce)
+Log.Logger = new LoggerConfiguration()
+    .MinimumLevel.Information()
+    .WriteTo.Console()
+    .WriteTo.File("logs/log-.txt", rollingInterval: RollingInterval.Day)
+    .CreateLogger();
 
 var builder = WebApplication.CreateBuilder(args);
+
+// 2. SERILOG'U BUILDER'A BAĞLA (BURASI ÖNEMLİ)
+builder.Host.UseSerilog();
 
 // SERVICES
 builder.Services.AddControllers();
@@ -29,6 +40,7 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
+// Exception middleware
 app.UseMiddleware<ExceptionMiddleware>();
 
 app.UseHttpsRedirection();
