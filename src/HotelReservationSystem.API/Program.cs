@@ -6,6 +6,8 @@ using HotelReservationSystem.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using HotelReservationSystem.API.Middlewares;
 using Serilog;
+using HotelReservationSystem.Application.Interfaces;
+using HotelReservationSystem.Application.Services;
 
 // 1. SERILOG CONFIG (builder'dan önce)
 Log.Logger = new LoggerConfiguration()
@@ -15,6 +17,8 @@ Log.Logger = new LoggerConfiguration()
     .CreateLogger();
 
 var builder = WebApplication.CreateBuilder(args);
+
+
 
 // 2. SERILOG'U BUILDER'A BAĞLA (BURASI ÖNEMLİ)
 builder.Host.UseSerilog();
@@ -32,6 +36,9 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 builder.Services.AddScoped<IIdempotencyService, IdempotencyService>();
+
+builder.Services.AddScoped<IReservationCoordinator, ReservationCoordinator>();
+
 
 var app = builder.Build();
 
