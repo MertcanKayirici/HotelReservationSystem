@@ -18,22 +18,13 @@ namespace HotelReservationSystem.Application.Services
 
         public async Task CreateReservationAsync(CreateReservationDto dto)
         {
-            if (dto.CheckInDate < DateTime.Today)
-                throw new Exception("Check-in date cannot be in the past");
+            if (dto.CheckOut <= dto.CheckIn)
+                throw new Exception("INVALID_DATE");
 
-            var reservation = new Reservation
-            {
-                RoomId = dto.RoomId,
-                UserId = dto.UserId,
-                CheckInDate = dto.CheckInDate,
-                CheckOutDate = dto.CheckOutDate,
-                CreatedAt = DateTime.Now
-            };
+            if (string.IsNullOrEmpty(dto.IdempotencyKey))
+                throw new Exception("Idempotency key required");
 
-            var created = await _repository.TryCreateReservationAsync(reservation);
-
-            if (!created)
-                throw new Exception("Room is not available for selected dates");
+            // sadece request kabul edildi
         }
     }
 }

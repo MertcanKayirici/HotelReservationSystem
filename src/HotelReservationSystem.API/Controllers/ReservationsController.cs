@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 namespace HotelReservationSystem.API.Controllers
 {
     [ApiController]
-    [Route("api/[controller]")]
+    [Route("api/v1/[controller]")]
     public class ReservationsController : ControllerBase
     {
         private readonly IReservationService _service;
@@ -21,10 +21,10 @@ namespace HotelReservationSystem.API.Controllers
         {
             await _service.CreateReservationAsync(dto);
 
-            return Ok(new
+            return Accepted(new
             {
-                success = true,
-                message = "Reservation created successfully"
+                status = "PENDING",
+                requestId = dto.IdempotencyKey
             });
         }
     }
