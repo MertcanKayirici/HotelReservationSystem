@@ -47,6 +47,8 @@ namespace HotelReservationSystem.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("RoomId", "CheckInDate", "CheckOutDate");
+
                     b.ToTable("Reservations");
                 });
 #pragma warning restore 612, 618

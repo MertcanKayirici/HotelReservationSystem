@@ -17,17 +17,15 @@ namespace HotelReservationSystem.API.Controllers
         }
 
         [HttpPost]
-        public async Task<IActionResult> Create(CreateReservationDto dto)
+        public async Task<IActionResult> Create([FromBody] CreateReservationDto dto)
         {
-            try
+            await _service.CreateReservationAsync(dto);
+
+            return Ok(new
             {
-                await _service.CreateReservationAsync(dto);
-                return Ok(new { message = "Reservation created successfully" });
-            }
-            catch (Exception ex)
-            {
-                return BadRequest(new { error = ex.Message });
-            }
+                success = true,
+                message = "Reservation created successfully"
+            });
         }
     }
 }

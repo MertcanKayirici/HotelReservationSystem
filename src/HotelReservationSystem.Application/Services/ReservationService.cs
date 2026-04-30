@@ -18,14 +18,8 @@ namespace HotelReservationSystem.Application.Services
 
         public async Task CreateReservationAsync(CreateReservationDto dto)
         {
-            var isAvailable = await _repository.IsRoomAvailableAsync(
-                dto.RoomId,
-                dto.CheckInDate,
-                dto.CheckOutDate
-            );
-
-            if (!isAvailable)
-                throw new Exception("Room is not available for selected dates");
+            if (dto.CheckInDate < DateTime.Today)
+                throw new Exception("Check-in date cannot be in the past");
 
             var reservation = new Reservation
             {
@@ -36,7 +30,10 @@ namespace HotelReservationSystem.Application.Services
                 CreatedAt = DateTime.Now
             };
 
-            await _repository.AddAsync(reservation);
+            var created = await _repository.TryCreateReservationAsync(reservation);
+
+            if (!created)
+                throw new Exception("Room is not available for selected dates");
         }
     }
 }

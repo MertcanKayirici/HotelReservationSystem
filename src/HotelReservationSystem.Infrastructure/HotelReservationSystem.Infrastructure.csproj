@@ -10,9 +10,8 @@
     <Folder Include="Kafka\" />
     <Folder Include="Idempotency\" />
     <Folder Include="Outbox\" />
-    <Folder Include="Persistence\Db\" />
     <Folder Include="Persistence\Configurations\" />
-    <Folder Include="Persistence\Migrations\" />
+    <Folder Include="Persistence\Db\" />
     <Folder Include="Redis\" />
   </ItemGroup>
 
