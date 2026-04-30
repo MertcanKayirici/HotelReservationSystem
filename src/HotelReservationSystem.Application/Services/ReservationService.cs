@@ -18,6 +18,15 @@ namespace HotelReservationSystem.Application.Services
 
         public async Task CreateReservationAsync(CreateReservationDto dto)
         {
+            var isAvailable = await _repository.IsRoomAvailableAsync(
+                dto.RoomId,
+                dto.CheckInDate,
+                dto.CheckOutDate
+            );
+
+            if (!isAvailable)
+                throw new Exception("Room is not available for selected dates");
+
             var reservation = new Reservation
             {
                 RoomId = dto.RoomId,

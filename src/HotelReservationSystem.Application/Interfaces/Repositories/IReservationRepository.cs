@@ -6,5 +6,6 @@ namespace HotelReservationSystem.Application.Interfaces.Repositories
     public interface IReservationRepository
     {
         Task AddAsync(Reservation reservation);
+        Task<bool> IsRoomAvailableAsync(int roomId, DateTime checkIn, DateTime checkOut);
     }
 }
