@@ -1,7 +1,12 @@
-﻿public class CreateReservationDto
+﻿using System;
+
+namespace HotelReservationSystem.Application.DTOs
 {
-    public int RoomId { get; set; }
-    public int UserId { get; set; }
-    public DateTime CheckInDate { get; set; }
-    public DateTime CheckOutDate { get; set; }
+    public class CreateReservationDto
+    {
+        public int RoomId { get; set; }
+        public int UserId { get; set; }
+        public DateTime CheckInDate { get; set; }
+        public DateTime CheckOutDate { get; set; }
+    }
 }

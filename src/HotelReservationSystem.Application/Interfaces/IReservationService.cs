@@ -1,4 +1,10 @@
-﻿public interface IReservationService
+﻿using HotelReservationSystem.Application.DTOs;
+using System.Threading.Tasks;
+
+namespace HotelReservationSystem.Application.Interfaces
 {
-    Task CreateReservationAsync(CreateReservationDto dto);
+    public interface IReservationService
+    {
+        Task CreateReservationAsync(CreateReservationDto dto);
+    }
 }

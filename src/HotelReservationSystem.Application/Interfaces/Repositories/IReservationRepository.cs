@@ -1,4 +1,10 @@
-﻿public interface IReservationRepository
+﻿using HotelReservationSystem.Domain.Entities;
+using System.Threading.Tasks;
+
+namespace HotelReservationSystem.Application.Interfaces.Repositories
 {
-    Task AddAsync(Reservation reservation);
+    public interface IReservationRepository
+    {
+        Task AddAsync(Reservation reservation);
+    }
 }
