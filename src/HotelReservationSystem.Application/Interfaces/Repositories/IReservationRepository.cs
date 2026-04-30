@@ -1,4 +1,5 @@
 ﻿using HotelReservationSystem.Domain.Entities;
+using System;
 using System.Threading.Tasks;
 
 namespace HotelReservationSystem.Application.Interfaces.Repositories
@@ -7,5 +8,6 @@ namespace HotelReservationSystem.Application.Interfaces.Repositories
     {
         Task AddAsync(Reservation reservation);
         Task<bool> IsRoomAvailableAsync(int roomId, DateTime checkIn, DateTime checkOut);
+        Task<bool> TryCreateReservationAsync(Reservation reservation);
     }
 }
