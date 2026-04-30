@@ -10,6 +10,7 @@ namespace HotelReservationSystem.Application.Interfaces
 
     public interface IIdempotencyService
     {
+        Task UpdateStatusAsync(string key, string status, string response);
         Task<Idempotency> GetAsync(string key);
         Task CreateAsync(Idempotency entity);
     }

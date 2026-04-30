@@ -57,6 +57,15 @@ namespace HotelReservationSystem.Application.Services
                     Response = "",               // ✅ DB boş kabul etmiyorsa
                     CreatedAt = DateTime.UtcNow
                 });
+
+                // 🔥 FAKE PROCESSING (Kafka yerine)
+                await Task.Delay(500);
+
+                await _idempotency.UpdateStatusAsync(
+                    dto.IdempotencyKey,
+                    "COMPLETED",
+                    "Reservation created successfully"
+                );
             }
             catch (Exception ex)
             {

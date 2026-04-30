@@ -12,6 +12,19 @@ public class IdempotencyService : IIdempotencyService
         _context = context;
     }
 
+    public async Task UpdateStatusAsync(string key, string status, string response)
+    {
+        var entity = await _context.Idempotencies
+            .FirstOrDefaultAsync(x => x.Key == key);
+
+        if (entity == null)
+            return;
+
+        entity.Status = status;
+        entity.Response = response;
+
+        await _context.SaveChangesAsync();
+    }
     public async Task<Idempotency?> GetAsync(string key)
     {
         var result = await _context.Idempotencies
