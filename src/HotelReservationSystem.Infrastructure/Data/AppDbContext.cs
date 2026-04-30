@@ -13,4 +13,3 @@ namespace HotelReservationSystem.Infrastructure.Data
         public DbSet<Reservation> Reservations { get; set; }
     }
 }
-}

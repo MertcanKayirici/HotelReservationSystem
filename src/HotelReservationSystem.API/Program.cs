@@ -1,15 +1,27 @@
+using HotelReservationSystem.Application.Interfaces;
+using HotelReservationSystem.Application.Services;
+using HotelReservationSystem.Application.Interfaces.Repositories;
+using HotelReservationSystem.Infrastructure.Repositories;
+using HotelReservationSystem.Infrastructure.Data;
+using Microsoft.EntityFrameworkCore;
+
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
-
+// SERVICES
 builder.Services.AddControllers();
-// Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
+
+builder.Services.AddScoped<IReservationService, ReservationService>();
+builder.Services.AddScoped<IReservationRepository, ReservationRepository>();
+
+builder.Services.AddDbContext<AppDbContext>(options =>
+    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
+// PIPELINE
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
