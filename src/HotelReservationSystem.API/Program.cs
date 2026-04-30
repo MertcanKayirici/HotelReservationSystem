@@ -31,6 +31,8 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
+builder.Services.AddScoped<IIdempotencyService, IdempotencyService>();
+
 var app = builder.Build();
 
 // PIPELINE

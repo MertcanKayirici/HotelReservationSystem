@@ -33,13 +33,10 @@ namespace HotelReservationSystem.API.Middlewares
         {
             var statusCode = HttpStatusCode.BadRequest;
 
-            // İstersen burada tip bazlı ayrım yapabilirsin:
-            // if (ex is NotFoundException) statusCode = HttpStatusCode.NotFound;
-
             var response = new
             {
                 success = false,
-                error = ex.Message
+                error = ex.ToString() 
             };
 
             var json = JsonSerializer.Serialize(response);

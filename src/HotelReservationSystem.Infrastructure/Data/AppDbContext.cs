@@ -11,11 +11,11 @@ namespace HotelReservationSystem.Infrastructure.Data
         }
 
         public DbSet<Reservation> Reservations { get; set; }
+        public DbSet<Idempotency> Idempotencies { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
-            modelBuilder.Entity<Reservation>()
-                .HasIndex(r => new { r.RoomId, r.CheckInDate, r.CheckOutDate });
+            modelBuilder.ApplyConfigurationsFromAssembly(typeof(AppDbContext).Assembly);
 
             base.OnModelCreating(modelBuilder);
         }
