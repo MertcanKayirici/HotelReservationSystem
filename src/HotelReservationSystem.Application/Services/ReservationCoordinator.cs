@@ -10,20 +10,24 @@ namespace HotelReservationSystem.Application.Services
     public class ReservationCoordinator : IReservationCoordinator
     {
         private readonly IIdempotencyService _idempotency;
+        private readonly IOutboxService _outbox;
 
-        public ReservationCoordinator(IIdempotencyService idempotency)
+        public ReservationCoordinator(
+            IIdempotencyService idempotency,
+            IOutboxService outbox)
         {
             _idempotency = idempotency;
+            _outbox = outbox;
         }
 
         public async Task HandleAsync(CreateReservationDto dto)
         {
             // 🔹 VALIDATION
             if (dto.CheckOut <= dto.CheckIn)
-                throw new Exception("INVALID_DATE");
+                throw new Exception("INVALID_DATE_RANGE");
 
             if (string.IsNullOrEmpty(dto.IdempotencyKey))
-                throw new Exception("Idempotency key required");
+                throw new Exception("IDEMPOTENCY_KEY_REQUIRED");
 
             // 🔍 IDEMPOTENCY CHECK
             var existing = await _idempotency.GetAsync(dto.IdempotencyKey);
@@ -46,7 +50,7 @@ namespace HotelReservationSystem.Application.Services
                 dto.CheckOut
             });
 
-            // 🔥 CREATE REQUEST
+            // 🔥 CREATE IDEMPOTENCY RECORD
             try
             {
                 await _idempotency.CreateAsync(new Idempotency
@@ -62,6 +66,15 @@ namespace HotelReservationSystem.Application.Services
             {
                 throw new Exception("IN_PROGRESS");
             }
+
+            // 🔥 OUTBOX EVENT (EN KRİTİK EKLEME)
+            await _outbox.AddAsync(new OutboxMessage
+            {
+                Type = "ReservationCreated",
+                Payload = JsonSerializer.Serialize(dto),
+                CreatedAt = DateTime.UtcNow,
+                Processed = false
+            });
 
             // 🔥 FAKE PROCESS (Kafka yerine)
             await Task.Delay(500);

@@ -29,6 +29,8 @@ builder.Services.AddControllers();
 builder.Services.AddScoped<IReservationService, ReservationService>();
 builder.Services.AddScoped<IReservationRepository, ReservationRepository>();
 
+builder.Services.AddScoped<IOutboxService, OutboxService>();
+
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 

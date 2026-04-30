@@ -35,7 +35,7 @@ namespace HotelReservationSystem.Infrastructure.Migrations
 
                     b.Property<string>("Key")
                         .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                        .HasColumnType("nvarchar(450)");
 
                     b.Property<string>("RequestHash")
                         .IsRequired()
@@ -51,7 +51,37 @@ namespace HotelReservationSystem.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("Key")
+                        .IsUnique();
+
                     b.ToTable("Idempotencies");
+                });
+
+            modelBuilder.Entity("HotelReservationSystem.Domain.Entities.OutboxMessage", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Payload")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<bool>("Processed")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("OutboxMessages");
                 });
 
             modelBuilder.Entity("HotelReservationSystem.Domain.Entities.Reservation", b =>
@@ -78,8 +108,6 @@ namespace HotelReservationSystem.Infrastructure.Migrations
                         .HasColumnType("int");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("RoomId", "CheckInDate", "CheckOutDate");
 
                     b.ToTable("Reservations");
                 });

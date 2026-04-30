@@ -10,6 +10,7 @@ namespace HotelReservationSystem.Infrastructure.Data
         {
         }
 
+        public DbSet<OutboxMessage> OutboxMessages { get; set; }
         public DbSet<Reservation> Reservations { get; set; }
         public DbSet<Idempotency> Idempotencies { get; set; }
 
