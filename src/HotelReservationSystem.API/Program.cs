@@ -5,6 +5,7 @@ using HotelReservationSystem.Infrastructure.Repositories;
 using HotelReservationSystem.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using HotelReservationSystem.API.Middlewares;
+using HotelReservationSystem.Infrastructure.Outbox;
 using Serilog;
 using HotelReservationSystem.Application.Interfaces;
 using HotelReservationSystem.Application.Services;
@@ -22,6 +23,7 @@ var builder = WebApplication.CreateBuilder(args);
 
 // 2. SERILOG'U BUILDER'A BAĞLA (BURASI ÖNEMLİ)
 builder.Host.UseSerilog();
+
 
 // SERVICES
 builder.Services.AddControllers();
@@ -41,6 +43,7 @@ builder.Services.AddScoped<IIdempotencyService, IdempotencyService>();
 
 builder.Services.AddScoped<IReservationCoordinator, ReservationCoordinator>();
 
+builder.Services.AddHostedService<OutboxWorker>();
 
 var app = builder.Build();
 
@@ -52,8 +55,6 @@ if (app.Environment.IsDevelopment())
 }
 
 // Exception middleware
-app.UseMiddleware<ExceptionMiddleware>();
-
 app.UseMiddleware<RequestLoggingMiddleware>();
 app.UseMiddleware<ExceptionMiddleware>();
 
