@@ -7,53 +7,75 @@ namespace HotelReservationSystem.Infrastructure.Redis
     {
         private readonly IDatabase? _db;
 
-        public RedisLockService(IConnectionMultiplexer redis)
+        public RedisLockService(IConnectionMultiplexer? redis)
         {
             _db = redis?.GetDatabase();
+
+            Console.WriteLine(_db == null
+                ? "❌ REDIS DB NULL (fallback mode)"
+                : "✔ REDIS DB CONNECTED");
         }
 
-        // 🔥 Lock al (token ile)
+        // 🔥 LOCK AL
         public async Task<(bool Acquired, string Token)> AcquireLockAsync(string key, TimeSpan expiry)
         {
             var token = Guid.NewGuid().ToString("N");
 
+            Console.WriteLine($"LOCK TRY: {key}");
+
+            // ❗ Redis yok → lock YOK
+            if (_db == null)
+            {
+                Console.WriteLine("⚠ Redis disabled → NO LOCK");
+                return (false, token);
+            }
+
             try
             {
-                if (_db == null)
-                    return (true, token); // DEV MODE
+                var ok = await _db.StringSetAsync(
+                    key,
+                    token,
+                    expiry,
+                    When.NotExists
+                );
 
-                var ok = await _db.StringSetAsync(key, token, expiry, When.NotExists);
+                Console.WriteLine($"LOCK RESULT: {ok}");
+
                 return (ok, token);
             }
-            catch
+            catch (Exception ex)
             {
-                return (true, token); // 🔥 fallback: sistemi kırma
+                Console.WriteLine("❌ Redis lock error: " + ex.Message);
+                return (false, token);
             }
         }
 
-        // 🔥 Sadece kendi lock’ını bırak (token kontrolü)
+        // 🔥 LOCK BIRAK (SAFE LUA)
         public async Task ReleaseLockAsync(string key, string token)
         {
+            if (_db == null)
+                return;
+
             try
             {
-                if (_db == null)
-                    return;
-
-                // Lua ile atomik kontrol + sil
                 var script = @"
-                        if redis.call('GET', KEYS[1]) == ARGV[1] then
-                            return redis.call('DEL', KEYS[1])
-                        else
-                            return 0
-                        end";
+                    if redis.call('GET', KEYS[1]) == ARGV[1] then
+                        return redis.call('DEL', KEYS[1])
+                    else
+                        return 0
+                    end";
 
-                await _db.ScriptEvaluateAsync(script,
+                await _db.ScriptEvaluateAsync(
+                    script,
                     new RedisKey[] { key },
-                    new RedisValue[] { token });
+                    new RedisValue[] { token }
+                );
+
+                Console.WriteLine($"LOCK RELEASE: {key}");
             }
-            catch
+            catch (Exception ex)
             {
-                // ignore
+                Console.WriteLine("❌ Redis release error: " + ex.Message);
             }
         }
     }

@@ -22,30 +22,46 @@ builder.Host.UseSerilog();
 
 Console.WriteLine("🚀 APP STARTING...");
 
-// 🔥 REDIS OPTIONAL (config'e bağladık)
+// 🔥 REDIS CONFIG
 var redisEnabled = builder.Configuration.GetValue<bool>("Redis:Enabled");
 var redisConn = builder.Configuration["Redis:Connection"];
 
-if (redisEnabled)
+Console.WriteLine($"Redis Enabled: {redisEnabled}");
+Console.WriteLine($"Redis Connection: {redisConn}");
+
+// 🔥 REDIS REGISTER (DOĞRU)
+builder.Services.AddSingleton<IConnectionMultiplexer?>(sp =>
 {
-    builder.Services.AddSingleton<IConnectionMultiplexer>(sp =>
+    if (!redisEnabled)
     {
-        try
+        Console.WriteLine("⚠️ Redis DISABLED");
+        return null;
+    }
+
+    try
+    {
+        Console.WriteLine("🔗 Redis connecting...");
+
+        var options = ConfigurationOptions.Parse(redisConn);
+        options.AbortOnConnectFail = false;
+
+        var connection = ConnectionMultiplexer.Connect(options);
+
+        if (!connection.IsConnected)
         {
-            Console.WriteLine("Redis connecting...");
-            return ConnectionMultiplexer.Connect(redisConn);
+            Console.WriteLine("❌ Redis NOT CONNECTED");
+            return null;
         }
-        catch (Exception ex)
-        {
-            Console.WriteLine("Redis FAILED: " + ex.Message);
-            return null!;
-        }
-    });
-}
-else
-{
-    builder.Services.AddSingleton<IConnectionMultiplexer?>(sp => null);
-}
+
+        Console.WriteLine("✅ Redis CONNECTED ✔");
+        return connection;
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine("❌ Redis FAILED: " + ex.Message);
+        return null;
+    }
+});
 
 // 🔥 SERVICES
 builder.Services.AddScoped<IRedisLockService, RedisLockService>();
@@ -68,12 +84,12 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-// 🔥 WORKER (KRİTİK)
+// 🔥 WORKER
 builder.Services.AddHostedService<OutboxWorker>();
 
 var app = builder.Build();
 
-Console.WriteLine("APP BUILT");
+Console.WriteLine("✅ APP BUILT");
 
 // PIPELINE
 if (app.Environment.IsDevelopment())

@@ -36,6 +36,7 @@ public class OutboxWorker : BackgroundService
             catch (Exception ex)
             {
                 Console.WriteLine("Kafka INIT FAIL: " + ex.Message);
+                kafkaEnabled = false; // 🔥 fallback
             }
         }
 
@@ -48,13 +49,15 @@ public class OutboxWorker : BackgroundService
 
                 var messages = await context.OutboxMessages
                     .Where(x => !x.Processed && !x.Dead)
-                    .ToListAsync();
+                    .OrderBy(x => x.CreatedAt) // 🔥 önemli
+                    .Take(50) // 🔥 batch limit (prod için şart)
+                    .ToListAsync(stoppingToken);
 
                 foreach (var msg in messages)
                 {
                     try
                     {
-                        if (producer != null && kafkaEnabled)
+                        if (kafkaEnabled && producer != null)
                         {
                             await producer.SendAsync(topic, msg.Payload);
                         }
@@ -68,24 +71,34 @@ public class OutboxWorker : BackgroundService
                     catch (Exception ex)
                     {
                         msg.RetryCount++;
+
                         Console.WriteLine($"Retry {msg.RetryCount}: {ex.Message}");
 
                         if (msg.RetryCount >= 5)
                         {
                             msg.Dead = true;
-                            Console.WriteLine("💀 DEAD LETTER");
+                            Console.WriteLine($"💀 DEAD LETTER: {msg.Payload}");
                         }
                     }
                 }
 
-                await context.SaveChangesAsync();
+                await context.SaveChangesAsync(stoppingToken);
             }
             catch (Exception ex)
             {
                 Console.WriteLine("🔥 WORKER LOOP CRASH: " + ex.Message);
             }
 
-            await Task.Delay(2000, stoppingToken);
+            try
+            {
+                await Task.Delay(2000, stoppingToken);
+            }
+            catch (TaskCanceledException)
+            {
+                // graceful shutdown (優雅終了 - düzgün kapanış)
+            }
         }
+
+        Console.WriteLine("OUTBOX WORKER STOPPED");
     }
 }
