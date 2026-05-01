@@ -29,14 +29,15 @@ public class ReservationConsumer : BackgroundService
             return;
         }
 
-        var config = new ConsumerConfig
+        var consumerConfig = new ConsumerConfig
         {
             BootstrapServers = _config["Kafka:BootstrapServers"],
             GroupId = "reservation-consumer-group",
-            AutoOffsetReset = AutoOffsetReset.Earliest
+            AutoOffsetReset = AutoOffsetReset.Earliest,
+            EnableAutoCommit = false // 🔥 manuel commit
         };
 
-        using var consumer = new ConsumerBuilder<Ignore, string>(config).Build();
+        using var consumer = new ConsumerBuilder<Ignore, string>(consumerConfig).Build();
 
         consumer.Subscribe(_config["Kafka:Topic"]);
 
@@ -52,8 +53,30 @@ public class ReservationConsumer : BackgroundService
 
                 var dto = JsonSerializer.Deserialize<CreateReservationDto>(result.Message.Value);
 
+                if (dto == null)
+                {
+                    Console.WriteLine("❌ DTO NULL → skip");
+                    continue;
+                }
+
                 using var scope = _serviceProvider.CreateScope();
                 var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+                // 🔥 IDEMPOTENCY (duplicate event koruma)
+                var exists = await context.Reservations.AnyAsync(x =>
+                    x.RoomId == dto.RoomId &&
+                    x.UserId == dto.UserId &&
+                    x.CheckInDate == dto.CheckIn &&
+                    x.CheckOutDate == dto.CheckOut
+                );
+
+                if (exists)
+                {
+                    Console.WriteLine("⚠ DUPLICATE EVENT SKIPPED");
+
+                    consumer.Commit(result); // yine commit et
+                    continue;
+                }
 
                 await context.Reservations.AddAsync(new Reservation
                 {
@@ -66,11 +89,20 @@ public class ReservationConsumer : BackgroundService
                 await context.SaveChangesAsync();
 
                 Console.WriteLine("✅ DB WRITE (Consumer)");
+
+                // 🔥 sadece başarılıysa commit
+                consumer.Commit(result);
+            }
+            catch (ConsumeException ex)
+            {
+                Console.WriteLine("❌ KAFKA ERROR: " + ex.Error.Reason);
             }
             catch (Exception ex)
             {
-                Console.WriteLine("❌ CONSUMER ERROR: " + ex.Message);
+                Console.WriteLine("❌ PROCESS ERROR: " + ex.Message);
             }
         }
+
+        consumer.Close();
     }
 }

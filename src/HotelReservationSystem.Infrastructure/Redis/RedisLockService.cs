@@ -1,82 +1,46 @@
-﻿using StackExchange.Redis;
-using HotelReservationSystem.Application.Interfaces;
+﻿using HotelReservationSystem.Application.Interfaces;
+using Microsoft.Extensions.DependencyInjection;
+using StackExchange.Redis;
 
-namespace HotelReservationSystem.Infrastructure.Redis
+public class RedisLockService : IRedisLockService
 {
-    public class RedisLockService : IRedisLockService
+    private readonly IConnectionMultiplexer? _redis;
+
+    public RedisLockService(IServiceProvider serviceProvider)
     {
-        private readonly IDatabase? _db;
+        // 🔥 OPTIONAL RESOLVE
+        _redis = serviceProvider.GetService<IConnectionMultiplexer>();
+    }
 
-        public RedisLockService(IConnectionMultiplexer? redis)
+    public async Task<(bool, string)> AcquireLockAsync(string key, TimeSpan expiry)
+    {
+        // 🔥 REDIS YOK → FAKE LOCK
+        if (_redis == null)
         {
-            _db = redis?.GetDatabase();
-
-            Console.WriteLine(_db == null
-                ? "❌ REDIS DB NULL (fallback mode)"
-                : "✔ REDIS DB CONNECTED");
+            Console.WriteLine("⚠️ FAKE LOCK (Redis OFF)");
+            return (true, Guid.NewGuid().ToString());
         }
 
-        // 🔥 LOCK AL
-        public async Task<(bool Acquired, string Token)> AcquireLockAsync(string key, TimeSpan expiry)
+        var db = _redis.GetDatabase();
+        var token = Guid.NewGuid().ToString();
+
+        var acquired = await db.StringSetAsync(key, token, expiry, When.NotExists);
+
+        return (acquired, token);
+    }
+
+    public async Task ReleaseLockAsync(string key, string token)
+    {
+        if (_redis == null)
+            return;
+
+        var db = _redis.GetDatabase();
+
+        var current = await db.StringGetAsync(key);
+
+        if (current == token)
         {
-            var token = Guid.NewGuid().ToString("N");
-
-            Console.WriteLine($"LOCK TRY: {key}");
-
-            // ❗ Redis yok → lock YOK
-            if (_db == null)
-            {
-                Console.WriteLine("⚠ Redis disabled → NO LOCK");
-                return (false, token);
-            }
-
-            try
-            {
-                var ok = await _db.StringSetAsync(
-                    key,
-                    token,
-                    expiry,
-                    When.NotExists
-                );
-
-                Console.WriteLine($"LOCK RESULT: {ok}");
-
-                return (ok, token);
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine("❌ Redis lock error: " + ex.Message);
-                return (false, token);
-            }
-        }
-
-        // 🔥 LOCK BIRAK (SAFE LUA)
-        public async Task ReleaseLockAsync(string key, string token)
-        {
-            if (_db == null)
-                return;
-
-            try
-            {
-                var script = @"
-                    if redis.call('GET', KEYS[1]) == ARGV[1] then
-                        return redis.call('DEL', KEYS[1])
-                    else
-                        return 0
-                    end";
-
-                await _db.ScriptEvaluateAsync(
-                    script,
-                    new RedisKey[] { key },
-                    new RedisValue[] { token }
-                );
-
-                Console.WriteLine($"LOCK RELEASE: {key}");
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine("❌ Redis release error: " + ex.Message);
-            }
+            await db.KeyDeleteAsync(key);
         }
     }
 }

@@ -3,13 +3,11 @@ using HotelReservationSystem.Application.Services;
 using HotelReservationSystem.Application.Interfaces.Repositories;
 using HotelReservationSystem.Infrastructure;
 using HotelReservationSystem.Infrastructure.Data;
-using HotelReservationSystem.Infrastructure.Redis;
 using Microsoft.EntityFrameworkCore;
 using HotelReservationSystem.API.Middlewares;
 using Serilog;
 using StackExchange.Redis;
 
-// 🔥 SERILOG
 Log.Logger = new LoggerConfiguration()
     .MinimumLevel.Information()
     .WriteTo.Console()
@@ -22,7 +20,7 @@ builder.Host.UseSerilog();
 
 Console.WriteLine("🚀 APP STARTING...");
 
-// 🔥 CONFIG SAFE READ
+// CONFIG
 var redisEnabled = builder.Configuration.GetValue<bool?>("Redis:Enabled") ?? false;
 var redisConn = builder.Configuration.GetValue<string>("Redis:Connection") ?? "localhost:6379";
 
@@ -31,50 +29,33 @@ var kafkaEnabled = builder.Configuration.GetValue<bool?>("Kafka:Enabled") ?? fal
 Console.WriteLine($"Redis Enabled: {redisEnabled}");
 Console.WriteLine($"Kafka Enabled: {kafkaEnabled}");
 
-
-// 🔥 DB
+// DB
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 
-
-// 🔥 REDIS (SAFE MODE - HARDENED)
-builder.Services.AddSingleton<IConnectionMultiplexer?>(sp =>
+// 🔥 REDIS (DOĞRU PATTERN)
+if (redisEnabled)
 {
-    if (!redisEnabled)
-    {
-        Console.WriteLine("⚠️ Redis DISABLED");
-        return null;
-    }
-
-    try
+    builder.Services.AddSingleton<IConnectionMultiplexer>(sp =>
     {
         Console.WriteLine("🔗 Redis connecting...");
 
         var options = ConfigurationOptions.Parse(redisConn);
         options.AbortOnConnectFail = false;
-        options.ConnectRetry = 2;
-        options.ConnectTimeout = 2000;
 
         var connection = ConnectionMultiplexer.Connect(options);
 
-        if (!connection.IsConnected)
-        {
-            Console.WriteLine("❌ Redis NOT CONNECTED → fallback");
-            return null;
-        }
-
         Console.WriteLine("✅ Redis CONNECTED");
+
         return connection;
-    }
-    catch (Exception ex)
-    {
-        Console.WriteLine("❌ Redis FAILED: " + ex.Message);
-        return null;
-    }
-});
+    });
+}
+else
+{
+    Console.WriteLine("⚠️ Redis DISABLED");
+}
 
-
-// 🔥 SERVICES
+// SERVICES
 builder.Services.AddScoped<IRedisLockService, RedisLockService>();
 builder.Services.AddScoped<IReservationService, ReservationService>();
 builder.Services.AddScoped<IReservationRepository, ReservationRepository>();
@@ -85,13 +66,11 @@ builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
 
 builder.Services.AddControllers();
 
-
-// 🔥 SWAGGER
+// SWAGGER
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-
-// 🔥 WORKERS (SAFE START)
+// WORKERS
 builder.Services.AddHostedService<OutboxWorker>();
 
 if (kafkaEnabled)
@@ -100,16 +79,14 @@ if (kafkaEnabled)
 }
 else
 {
-    Console.WriteLine("⚠️ Kafka Consumer DISABLED (fallback mode)");
+    Console.WriteLine("⚠️ Kafka Consumer DISABLED");
 }
-
 
 var app = builder.Build();
 
 Console.WriteLine("✅ APP BUILT");
 
-
-// 🔥 PIPELINE
+// PIPELINE
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();

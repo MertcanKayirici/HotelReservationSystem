@@ -21,12 +21,14 @@ public class OutboxWorker : BackgroundService
         Console.WriteLine("🟢 OUTBOX WORKER STARTED");
 
         var kafkaEnabled = _config.GetValue<bool>("Kafka:Enabled");
-        var bootstrap = _config.GetValue<string>("Kafka:BootstrapServers");
-        var topic = _config.GetValue<string>("Kafka:Topic");
+        var bootstrap = _config["Kafka:BootstrapServers"];
+        var topic = _config["Kafka:Topic"];
+        var dlqTopic = _config["Kafka:DlqTopic"];
 
         Console.WriteLine($"KafkaEnabled: {kafkaEnabled}");
         Console.WriteLine($"Bootstrap: {bootstrap}");
         Console.WriteLine($"Topic: {topic}");
+        Console.WriteLine($"DLQ: {dlqTopic}");
 
         KafkaProducer? producer = null;
 
@@ -46,20 +48,11 @@ public class OutboxWorker : BackgroundService
 
         while (!stoppingToken.IsCancellationRequested)
         {
-            Console.WriteLine("🔁 WORKER LOOP");
-
             try
             {
                 using var scope = _serviceProvider.CreateScope();
 
-                var context = scope.ServiceProvider.GetService<AppDbContext>();
-
-                if (context == null)
-                {
-                    Console.WriteLine("❌ DbContext NULL");
-                    await Task.Delay(2000, stoppingToken);
-                    continue;
-                }
+                var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
                 var messages = await context.OutboxMessages
                     .Where(x => !x.Processed && !x.Dead)
@@ -69,34 +62,23 @@ public class OutboxWorker : BackgroundService
 
                 Console.WriteLine($"📦 Found {messages.Count} messages");
 
-                if (!messages.Any())
-                {
-                    await Task.Delay(2000, stoppingToken);
-                    continue;
-                }
-
                 foreach (var msg in messages)
                 {
                     try
                     {
-                        Console.WriteLine($"👉 Processing ID: {msg.Id}");
+                        Console.WriteLine($"➡ Processing ID: {msg.Id}");
 
                         if (kafkaEnabled && producer != null)
                         {
-                            Console.WriteLine($"🚀 Kafka SEND → {msg.Payload}");
-
                             await producer.SendAsync(topic!, msg.Payload);
-
                             Console.WriteLine("✅ Kafka delivered");
-
-                            msg.Processed = true;
                         }
                         else
                         {
                             Console.WriteLine($"🧪 FAKE EVENT → {msg.Payload}");
-
-                            msg.Processed = true;
                         }
+
+                        msg.Processed = true;
                     }
                     catch (Exception ex)
                     {
@@ -104,10 +86,28 @@ public class OutboxWorker : BackgroundService
 
                         Console.WriteLine($"⚠ Retry {msg.RetryCount}: {ex.Message}");
 
+                        var delaySeconds = Math.Pow(2, msg.RetryCount);
+                        await Task.Delay(TimeSpan.FromSeconds(delaySeconds), stoppingToken);
+
                         if (msg.RetryCount >= 5)
                         {
                             msg.Dead = true;
-                            Console.WriteLine($"💀 DEAD LETTER → {msg.Payload}");
+
+                            Console.WriteLine($"💀 DLQ → {msg.Payload}");
+
+                            // 🔥 DLQ SEND
+                            if (kafkaEnabled && producer != null && !string.IsNullOrWhiteSpace(dlqTopic))
+                            {
+                                try
+                                {
+                                    await producer.SendAsync(dlqTopic, msg.Payload);
+                                    Console.WriteLine("📤 Sent to DLQ topic");
+                                }
+                                catch (Exception dlqEx)
+                                {
+                                    Console.WriteLine("❌ DLQ SEND FAIL: " + dlqEx.Message);
+                                }
+                            }
                         }
                     }
                 }
@@ -116,7 +116,7 @@ public class OutboxWorker : BackgroundService
             }
             catch (Exception ex)
             {
-                Console.WriteLine("🔥 WORKER CRASH: " + ex.Message);
+                Console.WriteLine("🔥 WORKER CRASH: " + ex);
             }
 
             await Task.Delay(2000, stoppingToken);
