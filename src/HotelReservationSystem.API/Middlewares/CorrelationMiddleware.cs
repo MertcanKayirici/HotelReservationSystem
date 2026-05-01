@@ -16,13 +16,10 @@ public class CorrelationMiddleware
                             ?? Guid.NewGuid().ToString();
 
         context.Items["CorrelationId"] = correlationId;
-
         context.Response.Headers["X-Correlation-Id"] = correlationId;
 
-        using (LogContext.PushProperty("CorrelationId", correlationId))
+        using (LogContext.PushProperty("CorrelationId", correlationId)) // 🔥 tüm loglara eklenir
         {
-            Console.WriteLine($"🧩 CorrelationId: {correlationId}");
-
             await _next(context);
         }
     }

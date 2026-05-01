@@ -6,12 +6,16 @@ using HotelReservationSystem.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using HotelReservationSystem.API.Middlewares;
 using Serilog;
+using Serilog.Context;
 using StackExchange.Redis;
 
 Log.Logger = new LoggerConfiguration()
     .MinimumLevel.Information()
-    .WriteTo.Console()
+    .Enrich.FromLogContext() // 🔥 CorrelationId buradan akacak
+    .WriteTo.Console(outputTemplate:
+        "{Timestamp:HH:mm:ss} [{Level}] ({CorrelationId}) {Message}{NewLine}{Exception}")
     .WriteTo.File("logs/log-.txt", rollingInterval: RollingInterval.Day)
+    //.WriteTo.Console(new Serilog.Formatting.Json.JsonFormatter()) // 👉 istersen JSON moda geç
     .CreateLogger();
 
 var builder = WebApplication.CreateBuilder(args);
@@ -63,6 +67,7 @@ builder.Services.AddScoped<IOutboxService, OutboxService>();
 builder.Services.AddScoped<IIdempotencyService, IdempotencyService>();
 builder.Services.AddScoped<IReservationCoordinator, ReservationCoordinator>();
 builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
+builder.Services.AddScoped<IAppLogger, AppLogger>();
 
 builder.Services.AddControllers();
 

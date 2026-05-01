@@ -6,17 +6,23 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using System.Text.Json;
 
 public class ReservationConsumer : BackgroundService
 {
     private readonly IServiceProvider _serviceProvider;
     private readonly IConfiguration _config;
+    private readonly ILogger<ReservationConsumer> _logger;
 
-    public ReservationConsumer(IServiceProvider serviceProvider, IConfiguration config)
+    public ReservationConsumer(
+        IServiceProvider serviceProvider,
+        IConfiguration config,
+        ILogger<ReservationConsumer> logger)
     {
         _serviceProvider = serviceProvider;
         _config = config;
+        _logger = logger;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -25,7 +31,7 @@ public class ReservationConsumer : BackgroundService
 
         if (!kafkaEnabled)
         {
-            Console.WriteLine("⚠️ Kafka OFF → Consumer çalışmaz (fallback mode)");
+            _logger.LogWarning("Kafka OFF → Consumer disabled");
             return;
         }
 
@@ -34,14 +40,13 @@ public class ReservationConsumer : BackgroundService
             BootstrapServers = _config["Kafka:BootstrapServers"],
             GroupId = "reservation-consumer-group",
             AutoOffsetReset = AutoOffsetReset.Earliest,
-            EnableAutoCommit = false // 🔥 manuel commit
+            EnableAutoCommit = false
         };
 
         using var consumer = new ConsumerBuilder<Ignore, string>(consumerConfig).Build();
-
         consumer.Subscribe(_config["Kafka:Topic"]);
 
-        Console.WriteLine("🟢 CONSUMER STARTED");
+        _logger.LogInformation("Consumer started");
 
         while (!stoppingToken.IsCancellationRequested)
         {
@@ -49,29 +54,24 @@ public class ReservationConsumer : BackgroundService
             {
                 var result = consumer.Consume(stoppingToken);
 
-                Console.WriteLine($"📥 EVENT: {result.Message.Value}");
+                _logger.LogInformation("Event received: {Payload}", result.Message.Value);
 
                 var dto = JsonSerializer.Deserialize<CreateReservationDto>(
                     result.Message.Value,
-                    new JsonSerializerOptions
-                    {
-                        PropertyNameCaseInsensitive = true
-                    });
-
-                Console.WriteLine("🔥 KEY: " + dto?.IdempotencyKey);
+                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
 
                 if (dto == null || string.IsNullOrEmpty(dto.IdempotencyKey))
                 {
-                    Console.WriteLine("❌ INVALID DTO OR KEY");
+                    _logger.LogError("Invalid DTO");
                     continue;
                 }
 
-                Console.WriteLine($"🔥 CORRELATION: {dto.CorrelationId}");
+                _logger.LogInformation("IdempotencyKey: {Key}", dto.IdempotencyKey);
+                _logger.LogInformation("CorrelationId: {CorrelationId}", dto.CorrelationId);
 
                 using var scope = _serviceProvider.CreateScope();
                 var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
-                // 🔥 IDEMPOTENCY (duplicate event koruma)
                 var exists = await context.Reservations.AnyAsync(x =>
                     x.RoomId == dto.RoomId &&
                     x.UserId == dto.UserId &&
@@ -81,9 +81,8 @@ public class ReservationConsumer : BackgroundService
 
                 if (exists)
                 {
-                    Console.WriteLine("⚠ DUPLICATE EVENT SKIPPED");
-
-                    consumer.Commit(result); // yine commit et
+                    _logger.LogWarning("Duplicate event skipped");
+                    consumer.Commit(result);
                     continue;
                 }
 
@@ -98,28 +97,26 @@ public class ReservationConsumer : BackgroundService
                 await context.SaveChangesAsync();
 
                 var idem = await context.Idempotencies
-                        .FirstOrDefaultAsync(x => x.Key == dto.IdempotencyKey);
+                    .FirstOrDefaultAsync(x => x.Key == dto.IdempotencyKey);
 
                 if (idem != null)
                 {
                     idem.Status = "COMPLETED";
                     idem.Response = "Reservation created successfully";
-
                     await context.SaveChangesAsync();
                 }
 
-                Console.WriteLine("✅ DB WRITE (Consumer)");
+                _logger.LogInformation("DB write successful");
 
-                // 🔥 sadece başarılıysa commit
                 consumer.Commit(result);
             }
             catch (ConsumeException ex)
             {
-                Console.WriteLine("❌ KAFKA ERROR: " + ex.Error.Reason);
+                _logger.LogError(ex, "Kafka error");
             }
             catch (Exception ex)
             {
-                Console.WriteLine("❌ PROCESS ERROR: " + ex.Message);
+                _logger.LogError(ex, "Processing error");
             }
         }
 

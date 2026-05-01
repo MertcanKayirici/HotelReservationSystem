@@ -3,7 +3,6 @@ using HotelReservationSystem.Application.DTOs;
 using HotelReservationSystem.Application.Interfaces;
 using HotelReservationSystem.Application.Interfaces.Repositories;
 using HotelReservationSystem.Domain.Entities;
-using System;
 using System.Text.Json;
 
 namespace HotelReservationSystem.Application.Services
@@ -15,19 +14,22 @@ namespace HotelReservationSystem.Application.Services
         private readonly IRedisLockService _lock;
         private readonly IReservationRepository _reservationRepository;
         private readonly IUnitOfWork _uow;
+        private readonly IAppLogger _logger;
 
         public ReservationCoordinator(
             IIdempotencyService idempotency,
             IOutboxService outbox,
             IRedisLockService lockService,
             IReservationRepository reservationRepository,
-            IUnitOfWork uow)
+            IUnitOfWork uow,
+            IAppLogger logger) // ✅ FIX
         {
             _idempotency = idempotency;
             _outbox = outbox;
             _lock = lockService;
             _reservationRepository = reservationRepository;
             _uow = uow;
+            _logger = logger; // ✅ FIX
         }
 
         public async Task HandleAsync(CreateReservationDto dto)
@@ -44,7 +46,7 @@ namespace HotelReservationSystem.Application.Services
             if (!acquired)
                 throw new Exception("ROOM_LOCKED");
 
-            Console.WriteLine("🔥 BEFORE UOW");
+            _logger.Info("Before UOW");
 
             try
             {
@@ -72,7 +74,7 @@ namespace HotelReservationSystem.Application.Services
 
                 await _uow.ExecuteAsync(async () =>
                 {
-                    Console.WriteLine("💾 INSIDE UOW");
+                    _logger.Info("Inside UOW");
 
                     var hasConflict = await _reservationRepository.HasConflictAsync(
                         dto.RoomId,
@@ -102,14 +104,11 @@ namespace HotelReservationSystem.Application.Services
                         RetryCount = 0
                     });
 
-                    Console.WriteLine("📤 OUTBOX CREATED");
+                    _logger.Info($"Outbox created for RoomId: {dto.RoomId}");
                 });
 
-                Console.WriteLine("✅ AFTER UOW");
+                _logger.Info("After UOW");
 
-                Console.WriteLine("✅ AFTER UOW");
-
-                // 🔥 artık UOW DIŞI (bilerek)
                 await _idempotency.UpdateStatusAsync(
                     dto.IdempotencyKey,
                     "COMPLETED",
