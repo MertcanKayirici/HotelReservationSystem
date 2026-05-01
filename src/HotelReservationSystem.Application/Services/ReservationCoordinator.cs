@@ -74,6 +74,15 @@ namespace HotelReservationSystem.Application.Services
                 {
                     Console.WriteLine("💾 INSIDE UOW");
 
+                    var hasConflict = await _reservationRepository.HasConflictAsync(
+                        dto.RoomId,
+                        dto.CheckIn,
+                        dto.CheckOut
+                    );
+
+                    if (hasConflict)
+                        throw new Exception("ROOM_CONFLICT");
+
                     await _idempotency.CreateAsync(new Idempotency
                     {
                         Key = dto.IdempotencyKey,

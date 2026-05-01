@@ -14,7 +14,7 @@ public class RedisLockService : IRedisLockService
 
     public async Task<(bool, string)> AcquireLockAsync(string key, TimeSpan expiry)
     {
-        // 🔥 REDIS YOK → FAKE LOCK
+        // REDIS YOK → FAKE LOCK
         if (_redis == null)
         {
             Console.WriteLine("⚠️ FAKE LOCK (Redis OFF)");
