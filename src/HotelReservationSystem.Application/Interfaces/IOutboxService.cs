@@ -1,7 +1,10 @@
 ﻿using HotelReservationSystem.Domain.Entities;
 using System.Threading.Tasks;
 
-public interface IOutboxService
+namespace HotelReservationSystem.Application.Interfaces
 {
-    Task AddAsync(OutboxMessage message);
+    public interface IOutboxService
+    {
+        Task AddAsync(OutboxMessage message);
+    }
 }

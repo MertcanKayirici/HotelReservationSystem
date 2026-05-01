@@ -1,4 +1,5 @@
-﻿using HotelReservationSystem.Domain.Entities;
+﻿using HotelReservationSystem.Application.Interfaces;
+using HotelReservationSystem.Domain.Entities;
 using HotelReservationSystem.Infrastructure.Data;
 
 public class OutboxService : IOutboxService
@@ -13,6 +14,5 @@ public class OutboxService : IOutboxService
     public async Task AddAsync(OutboxMessage message)
     {
         await _context.OutboxMessages.AddAsync(message);
-        await _context.SaveChangesAsync();
     }
 }

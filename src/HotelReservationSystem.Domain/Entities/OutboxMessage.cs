@@ -9,5 +9,8 @@
 
         public DateTime CreatedAt { get; set; }
         public bool Processed { get; set; }
+
+        public int RetryCount { get; set; } = 0;
+        public bool Dead { get; set; } = false;
     }
 }

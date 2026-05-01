@@ -76,7 +76,7 @@ namespace HotelReservationSystem.Application.Services
                         Key = dto.IdempotencyKey,
                         Status = "PENDING",
                         RequestHash = requestHash,
-                        Response = "", // 🔥 KRİTİK FIX
+                        Response = "",
                         CreatedAt = DateTime.UtcNow
                     });
 

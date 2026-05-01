@@ -9,7 +9,7 @@ using HotelReservationSystem.API.Middlewares;
 using Serilog;
 using StackExchange.Redis;
 
-// SERILOG
+// 🔥 SERILOG
 Log.Logger = new LoggerConfiguration()
     .MinimumLevel.Information()
     .WriteTo.Console()
@@ -20,18 +20,32 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Host.UseSerilog();
 
-// 🔥 REDIS OPTIONAL (CRASH YOK)
-builder.Services.AddSingleton<IConnectionMultiplexer?>(sp =>
+Console.WriteLine("🚀 APP STARTING...");
+
+// 🔥 REDIS OPTIONAL (config'e bağladık)
+var redisEnabled = builder.Configuration.GetValue<bool>("Redis:Enabled");
+var redisConn = builder.Configuration["Redis:Connection"];
+
+if (redisEnabled)
 {
-    try
+    builder.Services.AddSingleton<IConnectionMultiplexer>(sp =>
     {
-        return ConnectionMultiplexer.Connect("localhost:6379,abortConnect=false");
-    }
-    catch
-    {
-        return null;
-    }
-});
+        try
+        {
+            Console.WriteLine("Redis connecting...");
+            return ConnectionMultiplexer.Connect(redisConn);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine("Redis FAILED: " + ex.Message);
+            return null!;
+        }
+    });
+}
+else
+{
+    builder.Services.AddSingleton<IConnectionMultiplexer?>(sp => null);
+}
 
 // 🔥 SERVICES
 builder.Services.AddScoped<IRedisLockService, RedisLockService>();
@@ -44,19 +58,22 @@ builder.Services.AddScoped<IOutboxService, OutboxService>();
 builder.Services.AddScoped<IIdempotencyService, IdempotencyService>();
 builder.Services.AddScoped<IReservationCoordinator, ReservationCoordinator>();
 
-// 🔥 EKLE
+// 🔥 UnitOfWork
 builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
 
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 
+// Swagger
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-
+// 🔥 WORKER (KRİTİK)
 builder.Services.AddHostedService<OutboxWorker>();
 
 var app = builder.Build();
+
+Console.WriteLine("APP BUILT");
 
 // PIPELINE
 if (app.Environment.IsDevelopment())
@@ -71,5 +88,7 @@ app.UseMiddleware<ExceptionMiddleware>();
 app.UseHttpsRedirection();
 app.UseAuthorization();
 app.MapControllers();
+
+Console.WriteLine("🔥 APP RUNNING");
 
 app.Run();
