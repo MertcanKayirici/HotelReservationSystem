@@ -38,11 +38,9 @@ namespace HotelReservationSystem.Infrastructure.Migrations
                         .HasColumnType("nvarchar(450)");
 
                     b.Property<string>("RequestHash")
-                        .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("Response")
-                        .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("Status")
@@ -68,12 +66,18 @@ namespace HotelReservationSystem.Infrastructure.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
 
+                    b.Property<bool>("Dead")
+                        .HasColumnType("bit");
+
                     b.Property<string>("Payload")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<bool>("Processed")
                         .HasColumnType("bit");
+
+                    b.Property<int>("RetryCount")
+                        .HasColumnType("int");
 
                     b.Property<string>("Type")
                         .IsRequired()

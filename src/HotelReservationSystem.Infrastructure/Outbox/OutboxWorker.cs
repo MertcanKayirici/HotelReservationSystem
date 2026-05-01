@@ -21,63 +21,93 @@ public class OutboxWorker : BackgroundService
         Console.WriteLine("🟢 OUTBOX WORKER STARTED");
 
         var kafkaEnabled = _config.GetValue<bool>("Kafka:Enabled");
-        var bootstrap = _config["Kafka:BootstrapServers"];
-        var topic = _config["Kafka:Topic"];
+        var bootstrap = _config.GetValue<string>("Kafka:BootstrapServers");
+        var topic = _config.GetValue<string>("Kafka:Topic");
+
+        Console.WriteLine($"KafkaEnabled: {kafkaEnabled}");
+        Console.WriteLine($"Bootstrap: {bootstrap}");
+        Console.WriteLine($"Topic: {topic}");
 
         KafkaProducer? producer = null;
 
-        if (kafkaEnabled)
+        if (kafkaEnabled && !string.IsNullOrWhiteSpace(bootstrap))
         {
             try
             {
                 producer = new KafkaProducer(bootstrap);
-                Console.WriteLine("Kafka initialized");
+                Console.WriteLine("✅ Kafka initialized");
             }
             catch (Exception ex)
             {
-                Console.WriteLine("Kafka INIT FAIL: " + ex.Message);
-                kafkaEnabled = false; // 🔥 fallback
+                Console.WriteLine("❌ Kafka INIT FAIL: " + ex.Message);
+                kafkaEnabled = false;
             }
         }
 
         while (!stoppingToken.IsCancellationRequested)
         {
+            Console.WriteLine("🔁 WORKER LOOP");
+
             try
             {
                 using var scope = _serviceProvider.CreateScope();
-                var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+                var context = scope.ServiceProvider.GetService<AppDbContext>();
+
+                if (context == null)
+                {
+                    Console.WriteLine("❌ DbContext NULL");
+                    await Task.Delay(2000, stoppingToken);
+                    continue;
+                }
 
                 var messages = await context.OutboxMessages
                     .Where(x => !x.Processed && !x.Dead)
-                    .OrderBy(x => x.CreatedAt) // 🔥 önemli
-                    .Take(50) // 🔥 batch limit (prod için şart)
+                    .OrderBy(x => x.CreatedAt)
+                    .Take(50)
                     .ToListAsync(stoppingToken);
+
+                Console.WriteLine($"📦 Found {messages.Count} messages");
+
+                if (!messages.Any())
+                {
+                    await Task.Delay(2000, stoppingToken);
+                    continue;
+                }
 
                 foreach (var msg in messages)
                 {
                     try
                     {
+                        Console.WriteLine($"👉 Processing ID: {msg.Id}");
+
                         if (kafkaEnabled && producer != null)
                         {
-                            await producer.SendAsync(topic, msg.Payload);
+                            Console.WriteLine($"🚀 Kafka SEND → {msg.Payload}");
+
+                            await producer.SendAsync(topic!, msg.Payload);
+
+                            Console.WriteLine("✅ Kafka delivered");
+
+                            msg.Processed = true;
                         }
                         else
                         {
-                            Console.WriteLine($"[FAKE EVENT] {msg.Payload}");
-                        }
+                            Console.WriteLine($"🧪 FAKE EVENT → {msg.Payload}");
 
-                        msg.Processed = true;
+                            msg.Processed = true;
+                        }
                     }
                     catch (Exception ex)
                     {
                         msg.RetryCount++;
 
-                        Console.WriteLine($"Retry {msg.RetryCount}: {ex.Message}");
+                        Console.WriteLine($"⚠ Retry {msg.RetryCount}: {ex.Message}");
 
                         if (msg.RetryCount >= 5)
                         {
                             msg.Dead = true;
-                            Console.WriteLine($"💀 DEAD LETTER: {msg.Payload}");
+                            Console.WriteLine($"💀 DEAD LETTER → {msg.Payload}");
                         }
                     }
                 }
@@ -86,19 +116,12 @@ public class OutboxWorker : BackgroundService
             }
             catch (Exception ex)
             {
-                Console.WriteLine("🔥 WORKER LOOP CRASH: " + ex.Message);
+                Console.WriteLine("🔥 WORKER CRASH: " + ex.Message);
             }
 
-            try
-            {
-                await Task.Delay(2000, stoppingToken);
-            }
-            catch (TaskCanceledException)
-            {
-                // graceful shutdown (優雅終了 - düzgün kapanış)
-            }
+            await Task.Delay(2000, stoppingToken);
         }
 
-        Console.WriteLine("OUTBOX WORKER STOPPED");
+        Console.WriteLine("🛑 OUTBOX WORKER STOPPED");
     }
 }

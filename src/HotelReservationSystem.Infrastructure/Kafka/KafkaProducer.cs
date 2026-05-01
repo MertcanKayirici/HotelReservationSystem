@@ -2,26 +2,34 @@
 
 namespace HotelReservationSystem.Infrastructure.Kafka
 {
-    public class KafkaProducer
+    public class KafkaProducer : IDisposable
     {
-        private readonly ProducerConfig _config;
+        private readonly IProducer<Null, string> _producer;
 
         public KafkaProducer(string bootstrapServers)
         {
-            _config = new ProducerConfig
+            var config = new ProducerConfig
             {
                 BootstrapServers = bootstrapServers
             };
+
+            _producer = new ProducerBuilder<Null, string>(config).Build();
         }
 
         public async Task SendAsync(string topic, string message)
         {
-            using var producer = new ProducerBuilder<Null, string>(_config).Build();
-
-            await producer.ProduceAsync(topic, new Message<Null, string>
+            var result = await _producer.ProduceAsync(topic, new Message<Null, string>
             {
                 Value = message
             });
+
+            Console.WriteLine($"Kafka delivered → {result.TopicPartitionOffset}");
+        }
+
+        public void Dispose()
+        {
+            _producer.Flush(TimeSpan.FromSeconds(5));
+            _producer.Dispose();
         }
     }
 }
