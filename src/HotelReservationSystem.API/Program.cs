@@ -22,22 +22,22 @@ builder.Host.UseSerilog();
 
 Console.WriteLine("🚀 APP STARTING...");
 
-// 🔥 CONFIG
-var redisEnabled = builder.Configuration.GetValue<bool>("Redis:Enabled");
-var redisConn = builder.Configuration["Redis:Connection"];
+// 🔥 CONFIG SAFE READ
+var redisEnabled = builder.Configuration.GetValue<bool?>("Redis:Enabled") ?? false;
+var redisConn = builder.Configuration.GetValue<string>("Redis:Connection") ?? "localhost:6379";
 
-var kafkaEnabled = builder.Configuration.GetValue<bool>("Kafka:Enabled");
+var kafkaEnabled = builder.Configuration.GetValue<bool?>("Kafka:Enabled") ?? false;
 
 Console.WriteLine($"Redis Enabled: {redisEnabled}");
 Console.WriteLine($"Kafka Enabled: {kafkaEnabled}");
 
 
-// 🔥 DB (EN ÖNEMLİ)
+// 🔥 DB
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 
 
-// 🔥 REDIS (SAFE MODE)
+// 🔥 REDIS (SAFE MODE - HARDENED)
 builder.Services.AddSingleton<IConnectionMultiplexer?>(sp =>
 {
     if (!redisEnabled)
@@ -52,13 +52,18 @@ builder.Services.AddSingleton<IConnectionMultiplexer?>(sp =>
 
         var options = ConfigurationOptions.Parse(redisConn);
         options.AbortOnConnectFail = false;
+        options.ConnectRetry = 2;
+        options.ConnectTimeout = 2000;
 
         var connection = ConnectionMultiplexer.Connect(options);
 
-        Console.WriteLine(connection.IsConnected
-            ? "✅ Redis CONNECTED"
-            : "❌ Redis NOT CONNECTED");
+        if (!connection.IsConnected)
+        {
+            Console.WriteLine("❌ Redis NOT CONNECTED → fallback");
+            return null;
+        }
 
+        Console.WriteLine("✅ Redis CONNECTED");
         return connection;
     }
     catch (Exception ex)
@@ -69,7 +74,7 @@ builder.Services.AddSingleton<IConnectionMultiplexer?>(sp =>
 });
 
 
-// 🔥 SERVICES (HEPSİ SCOPED → DOĞRU)
+// 🔥 SERVICES
 builder.Services.AddScoped<IRedisLockService, RedisLockService>();
 builder.Services.AddScoped<IReservationService, ReservationService>();
 builder.Services.AddScoped<IReservationRepository, ReservationRepository>();
@@ -86,7 +91,7 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 
-// 🔥 WORKERLAR (SAFE MODE)
+// 🔥 WORKERS (SAFE START)
 builder.Services.AddHostedService<OutboxWorker>();
 
 if (kafkaEnabled)
@@ -95,7 +100,7 @@ if (kafkaEnabled)
 }
 else
 {
-    Console.WriteLine("⚠️ Kafka Consumer DISABLED");
+    Console.WriteLine("⚠️ Kafka Consumer DISABLED (fallback mode)");
 }
 
 

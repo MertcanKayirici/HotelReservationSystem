@@ -1,6 +1,8 @@
 ﻿using Confluent.Kafka;
 using HotelReservationSystem.Application.DTOs;
-using HotelReservationSystem.Application.Interfaces;
+using HotelReservationSystem.Domain.Entities;
+using HotelReservationSystem.Infrastructure.Data;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -19,28 +21,26 @@ public class ReservationConsumer : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        var enabled = _config.GetValue<bool>("Kafka:Enabled");
+        var kafkaEnabled = _config.GetValue<bool>("Kafka:Enabled");
 
-        if (!enabled)
+        if (!kafkaEnabled)
         {
-            Console.WriteLine("🚫 Kafka Consumer DISABLED (safe mode)");
+            Console.WriteLine("⚠️ Kafka OFF → Consumer çalışmaz (fallback mode)");
             return;
         }
 
-        var bootstrap = _config["Kafka:BootstrapServers"];
-        var topic = _config["Kafka:Topic"];
-
-        var configConsumer = new ConsumerConfig
+        var config = new ConsumerConfig
         {
-            BootstrapServers = bootstrap,
+            BootstrapServers = _config["Kafka:BootstrapServers"],
             GroupId = "reservation-consumer-group",
             AutoOffsetReset = AutoOffsetReset.Earliest
         };
 
-        using var consumer = new ConsumerBuilder<Ignore, string>(configConsumer).Build();
-        consumer.Subscribe(topic);
+        using var consumer = new ConsumerBuilder<Ignore, string>(config).Build();
 
-        Console.WriteLine("🎧 Kafka Consumer STARTED");
+        consumer.Subscribe(_config["Kafka:Topic"]);
+
+        Console.WriteLine("🟢 CONSUMER STARTED");
 
         while (!stoppingToken.IsCancellationRequested)
         {
@@ -48,21 +48,28 @@ public class ReservationConsumer : BackgroundService
             {
                 var result = consumer.Consume(stoppingToken);
 
-                Console.WriteLine($"📥 EVENT RECEIVED: {result.Message.Value}");
-
-                using var scope = _serviceProvider.CreateScope();
-                var coordinator = scope.ServiceProvider.GetRequiredService<IReservationCoordinator>();
+                Console.WriteLine($"📥 EVENT: {result.Message.Value}");
 
                 var dto = JsonSerializer.Deserialize<CreateReservationDto>(result.Message.Value);
 
-                if (dto != null)
+                using var scope = _serviceProvider.CreateScope();
+                var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+                await context.Reservations.AddAsync(new Reservation
                 {
-                    await coordinator.HandleAsync(dto);
-                }
+                    RoomId = dto.RoomId,
+                    UserId = dto.UserId,
+                    CheckInDate = dto.CheckIn,
+                    CheckOutDate = dto.CheckOut
+                });
+
+                await context.SaveChangesAsync();
+
+                Console.WriteLine("✅ DB WRITE (Consumer)");
             }
             catch (Exception ex)
             {
-                Console.WriteLine("🔥 Consumer error: " + ex.Message);
+                Console.WriteLine("❌ CONSUMER ERROR: " + ex.Message);
             }
         }
     }
