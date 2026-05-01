@@ -1,5 +1,6 @@
 ﻿using HotelReservationSystem.Application.DTOs;
 using HotelReservationSystem.Application.Interfaces;
+using HotelReservationSystem.Application.Common;
 using HotelReservationSystem.Domain.Entities;
 using System;
 using System.Text.Json;
@@ -45,26 +46,30 @@ namespace HotelReservationSystem.Application.Services
 
             try
             {
-                // 🔍 IDEMPOTENCY CHECK
-                var existing = await _idempotency.GetAsync(dto.IdempotencyKey);
-
-                if (existing != null)
-                {
-                    if (existing.Status == "PENDING")
-                        throw new Exception("IN_PROGRESS");
-
-                    if (existing.Status == "COMPLETED")
-                        return;
-                }
-
-                // 🔹 REQUEST HASH
-                var requestHash = JsonSerializer.Serialize(new
+                // 🔹 REQUEST HASH (SHA256)
+                var requestHash = RequestHashHelper.Compute(new
                 {
                     dto.RoomId,
                     dto.UserId,
                     dto.CheckIn,
                     dto.CheckOut
                 });
+
+                // 🔍 IDEMPOTENCY CHECK
+                var existing = await _idempotency.GetAsync(dto.IdempotencyKey);
+
+                if (existing != null)
+                {
+                    // 🔥 EN KRİTİK: HASH CHECK
+                    if (existing.RequestHash != requestHash)
+                        throw new Exception("IDEMPOTENCY_KEY_CONFLICT");
+
+                    if (existing.Status == "PENDING")
+                        throw new Exception("IN_PROGRESS");
+
+                    if (existing.Status == "COMPLETED")
+                        return;
+                }
 
                 // 🔥 CREATE IDEMPOTENCY
                 try
@@ -105,7 +110,6 @@ namespace HotelReservationSystem.Application.Services
             {
                 try
                 {
-                    // 🔥 TOKEN İLE GÜVENLİ RELEASE
                     await _lock.ReleaseLockAsync(lockKey, token);
                 }
                 catch
