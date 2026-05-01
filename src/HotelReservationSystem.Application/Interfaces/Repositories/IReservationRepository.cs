@@ -8,5 +8,6 @@ namespace HotelReservationSystem.Application.Interfaces.Repositories
     {
         Task<bool> ExistsConflictAsync(int roomId, DateTime checkIn, DateTime checkOut);
         Task AddAsync(Reservation reservation);
+        Task<bool> HasConflictAsync(int roomId, DateTime checkIn, DateTime checkOut);
     }
 }

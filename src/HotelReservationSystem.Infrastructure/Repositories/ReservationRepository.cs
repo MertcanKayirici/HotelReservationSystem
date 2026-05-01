@@ -18,6 +18,14 @@ public class ReservationRepository : IReservationRepository
         await _context.SaveChangesAsync();
     }
 
+    public async Task<bool> HasConflictAsync(int roomId, DateTime checkIn, DateTime checkOut)
+    {
+        return await _context.Reservations.AnyAsync(x =>
+            x.RoomId == roomId &&
+            !(checkOut <= x.CheckInDate || checkIn >= x.CheckOutDate)
+        );
+    }
+
     public async Task<bool> ExistsConflictAsync(int roomId, DateTime checkIn, DateTime checkOut)
     {
         return await _context.Reservations.AnyAsync(r =>
