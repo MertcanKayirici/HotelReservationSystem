@@ -1,7 +1,7 @@
 ﻿using HotelReservationSystem.Application.Interfaces;
 using HotelReservationSystem.Application.Services;
 using HotelReservationSystem.Application.Interfaces.Repositories;
-using HotelReservationSystem.Infrastructure.Repositories;
+using HotelReservationSystem.Infrastructure;
 using HotelReservationSystem.Infrastructure.Data;
 using HotelReservationSystem.Infrastructure.Redis;
 using Microsoft.EntityFrameworkCore;
@@ -44,11 +44,15 @@ builder.Services.AddScoped<IOutboxService, OutboxService>();
 builder.Services.AddScoped<IIdempotencyService, IdempotencyService>();
 builder.Services.AddScoped<IReservationCoordinator, ReservationCoordinator>();
 
+// 🔥 EKLE
+builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
+
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+
 
 builder.Services.AddHostedService<OutboxWorker>();
 

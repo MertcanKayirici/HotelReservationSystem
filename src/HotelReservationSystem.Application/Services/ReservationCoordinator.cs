@@ -1,10 +1,10 @@
-﻿using HotelReservationSystem.Application.DTOs;
+﻿using HotelReservationSystem.Application.Common;
+using HotelReservationSystem.Application.DTOs;
 using HotelReservationSystem.Application.Interfaces;
-using HotelReservationSystem.Application.Common;
+using HotelReservationSystem.Application.Interfaces.Repositories;
 using HotelReservationSystem.Domain.Entities;
 using System;
 using System.Text.Json;
-using System.Threading.Tasks;
 
 namespace HotelReservationSystem.Application.Services
 {
@@ -13,20 +13,25 @@ namespace HotelReservationSystem.Application.Services
         private readonly IIdempotencyService _idempotency;
         private readonly IOutboxService _outbox;
         private readonly IRedisLockService _lock;
+        private readonly IReservationRepository _reservationRepository;
+        private readonly IUnitOfWork _uow;
 
         public ReservationCoordinator(
             IIdempotencyService idempotency,
             IOutboxService outbox,
-            IRedisLockService lockService)
+            IRedisLockService lockService,
+            IReservationRepository reservationRepository,
+            IUnitOfWork uow)
         {
             _idempotency = idempotency;
             _outbox = outbox;
             _lock = lockService;
+            _reservationRepository = reservationRepository;
+            _uow = uow;
         }
 
         public async Task HandleAsync(CreateReservationDto dto)
         {
-            // 🔹 VALIDATION
             if (dto.CheckOut <= dto.CheckIn)
                 throw new Exception("INVALID_DATE_RANGE");
 
@@ -34,19 +39,13 @@ namespace HotelReservationSystem.Application.Services
                 throw new Exception("IDEMPOTENCY_KEY_REQUIRED");
 
             var lockKey = $"lock:room:{dto.RoomId}";
-
-            // 🔥 TOKEN'LI LOCK
-            var (acquired, token) = await _lock.AcquireLockAsync(
-                lockKey,
-                TimeSpan.FromSeconds(20)
-            );
+            var (acquired, token) = await _lock.AcquireLockAsync(lockKey, TimeSpan.FromSeconds(20));
 
             if (!acquired)
                 throw new Exception("ROOM_LOCKED");
 
             try
             {
-                // 🔹 REQUEST HASH (SHA256)
                 var requestHash = RequestHashHelper.Compute(new
                 {
                     dto.RoomId,
@@ -55,12 +54,10 @@ namespace HotelReservationSystem.Application.Services
                     dto.CheckOut
                 });
 
-                // 🔍 IDEMPOTENCY CHECK
                 var existing = await _idempotency.GetAsync(dto.IdempotencyKey);
 
                 if (existing != null)
                 {
-                    // 🔥 EN KRİTİK: HASH CHECK
                     if (existing.RequestHash != requestHash)
                         throw new Exception("IDEMPOTENCY_KEY_CONFLICT");
 
@@ -71,35 +68,43 @@ namespace HotelReservationSystem.Application.Services
                         return;
                 }
 
-                // 🔥 CREATE IDEMPOTENCY
-                try
+                // 🔥 TRANSACTION BLOCK (DOĞRU YER)
+                await _uow.ExecuteAsync(async () =>
                 {
                     await _idempotency.CreateAsync(new Idempotency
                     {
                         Key = dto.IdempotencyKey,
                         Status = "PENDING",
                         RequestHash = requestHash,
-                        Response = "",
                         CreatedAt = DateTime.UtcNow
                     });
-                }
-                catch
-                {
-                    throw new Exception("IN_PROGRESS");
-                }
 
-                // 🔥 OUTBOX EVENT
-                await _outbox.AddAsync(new OutboxMessage
-                {
-                    Type = "ReservationCreated",
-                    Payload = JsonSerializer.Serialize(dto),
-                    CreatedAt = DateTime.UtcNow,
-                    Processed = false
+                    var hasConflict = await _reservationRepository.ExistsConflictAsync(
+                        dto.RoomId,
+                        dto.CheckIn,
+                        dto.CheckOut
+                    );
+
+                    if (hasConflict)
+                        throw new Exception("ROOM_ALREADY_BOOKED");
+
+                    await _reservationRepository.AddAsync(new Reservation
+                    {
+                        RoomId = dto.RoomId,
+                        UserId = dto.UserId,
+                        CheckInDate = dto.CheckIn,
+                        CheckOutDate = dto.CheckOut
+                    });
+
+                    await _outbox.AddAsync(new OutboxMessage
+                    {
+                        Type = "ReservationCreated",
+                        Payload = JsonSerializer.Serialize(dto),
+                        CreatedAt = DateTime.UtcNow,
+                        Processed = false
+                    });
                 });
 
-                await Task.Delay(300);
-
-                // 🔥 FINAL STATE
                 await _idempotency.UpdateStatusAsync(
                     dto.IdempotencyKey,
                     "COMPLETED",
@@ -108,14 +113,7 @@ namespace HotelReservationSystem.Application.Services
             }
             finally
             {
-                try
-                {
-                    await _lock.ReleaseLockAsync(lockKey, token);
-                }
-                catch
-                {
-                    // ignore
-                }
+                await _lock.ReleaseLockAsync(lockKey, token);
             }
         }
     }

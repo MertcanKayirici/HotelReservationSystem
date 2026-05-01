@@ -6,8 +6,7 @@ namespace HotelReservationSystem.Application.Interfaces.Repositories
 {
     public interface IReservationRepository
     {
+        Task<bool> ExistsConflictAsync(int roomId, DateTime checkIn, DateTime checkOut);
         Task AddAsync(Reservation reservation);
-        Task<bool> IsRoomAvailableAsync(int roomId, DateTime checkIn, DateTime checkOut);
-        Task<bool> TryCreateReservationAsync(Reservation reservation);
     }
 }
