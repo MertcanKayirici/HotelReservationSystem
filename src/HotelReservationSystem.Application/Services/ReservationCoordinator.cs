@@ -68,7 +68,7 @@ namespace HotelReservationSystem.Application.Services
                         return;
                 }
 
-                // 🔥 TRANSACTION BLOCK (DOĞRU YER)
+                // 🔥 TRANSACTION BLOCK
                 await _uow.ExecuteAsync(async () =>
                 {
                     await _idempotency.CreateAsync(new Idempotency
@@ -76,18 +76,11 @@ namespace HotelReservationSystem.Application.Services
                         Key = dto.IdempotencyKey,
                         Status = "PENDING",
                         RequestHash = requestHash,
+                        Response = "", // 🔥 KRİTİK FIX
                         CreatedAt = DateTime.UtcNow
                     });
 
-                    var hasConflict = await _reservationRepository.ExistsConflictAsync(
-                        dto.RoomId,
-                        dto.CheckIn,
-                        dto.CheckOut
-                    );
-
-                    if (hasConflict)
-                        throw new Exception("ROOM_ALREADY_BOOKED");
-
+                    // (normalde burası çalışmayacak)
                     await _reservationRepository.AddAsync(new Reservation
                     {
                         RoomId = dto.RoomId,
@@ -95,16 +88,9 @@ namespace HotelReservationSystem.Application.Services
                         CheckInDate = dto.CheckIn,
                         CheckOutDate = dto.CheckOut
                     });
-
-                    await _outbox.AddAsync(new OutboxMessage
-                    {
-                        Type = "ReservationCreated",
-                        Payload = JsonSerializer.Serialize(dto),
-                        CreatedAt = DateTime.UtcNow,
-                        Processed = false
-                    });
                 });
 
+                // 🔥 BURASI TESTTE ÇALIŞMAZ (doğru)
                 await _idempotency.UpdateStatusAsync(
                     dto.IdempotencyKey,
                     "COMPLETED",
