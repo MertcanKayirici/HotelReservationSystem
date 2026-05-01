@@ -1,7 +1,6 @@
 ﻿using HotelReservationSystem.Application.DTOs;
 using HotelReservationSystem.Application.Interfaces;
-using System;
-using System.Threading.Tasks;
+using System.Text.Json;
 
 namespace HotelReservationSystem.Application.Services
 {

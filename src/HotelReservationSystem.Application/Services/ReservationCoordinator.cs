@@ -120,7 +120,14 @@ namespace HotelReservationSystem.Application.Services
                 await _idempotency.UpdateStatusAsync(
                     dto.IdempotencyKey,
                     "COMPLETED",
-                    "Reservation created successfully"
+                    JsonSerializer.Serialize(new
+                    {
+                        message = "Reservation created successfully",
+                        roomId = dto.RoomId,
+                        userId = dto.UserId,
+                        checkIn = dto.CheckIn,
+                        checkOut = dto.CheckOut
+                    })
                 );
             }
             finally

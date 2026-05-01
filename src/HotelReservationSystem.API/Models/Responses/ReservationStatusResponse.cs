@@ -3,6 +3,6 @@
     public class ReservationStatusResponse
     {
         public string Status { get; set; }
-        public string? Response { get; set; }
+        public object? Data { get; set; }
     }
 }

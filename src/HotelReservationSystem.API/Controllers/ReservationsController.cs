@@ -33,11 +33,8 @@ namespace HotelReservationSystem.API.Controllers
         {
             var result = await _service.GetStatusAsync(requestId);
 
-            return Ok(new ReservationStatusResponse
-            {
-                Status = result.Status,
-                Response = result.Response
-            });
+            // 🔥 ARTIK MAPPING YAPMA → direkt dön
+            return Ok(result);
         }
     }
 }

@@ -2,7 +2,7 @@
 {
     public class ReservationStatusResult
     {
-        public string Status { get; set; } = default!;
+        public string Status { get; set; }
         public string? Response { get; set; }
     }
 }
