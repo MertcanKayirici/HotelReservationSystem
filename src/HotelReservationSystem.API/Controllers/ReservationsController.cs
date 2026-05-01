@@ -22,12 +22,22 @@ namespace HotelReservationSystem.API.Controllers
         {
             await _service.CreateReservationAsync(dto);
 
-            var response = new CreateReservationResponse
+            return Accepted(new CreateReservationResponse
             {
                 RequestId = dto.IdempotencyKey
-            };
+            });
+        }
 
-            return Accepted(response); 
+        [HttpGet("status/{requestId}")]
+        public async Task<IActionResult> GetStatus(string requestId)
+        {
+            var result = await _service.GetStatusAsync(requestId);
+
+            return Ok(new ReservationStatusResponse
+            {
+                Status = result.Status,
+                Response = result.Response
+            });
         }
     }
 }

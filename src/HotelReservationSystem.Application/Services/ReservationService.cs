@@ -1,5 +1,6 @@
 ﻿using HotelReservationSystem.Application.DTOs;
 using HotelReservationSystem.Application.Interfaces;
+using System;
 using System.Threading.Tasks;
 
 namespace HotelReservationSystem.Application.Services
@@ -7,15 +8,33 @@ namespace HotelReservationSystem.Application.Services
     public class ReservationService : IReservationService
     {
         private readonly IReservationCoordinator _coordinator;
+        private readonly IIdempotencyService _idempotency;
 
-        public ReservationService(IReservationCoordinator coordinator)
+        public ReservationService(
+            IReservationCoordinator coordinator,
+            IIdempotencyService idempotency)
         {
             _coordinator = coordinator;
+            _idempotency = idempotency;
         }
 
         public async Task CreateReservationAsync(CreateReservationDto dto)
         {
             await _coordinator.HandleAsync(dto);
+        }
+
+        public async Task<ReservationStatusResult> GetStatusAsync(string requestId)
+        {
+            var record = await _idempotency.GetAsync(requestId);
+
+            if (record == null)
+                throw new Exception("NOT_FOUND");
+
+            return new ReservationStatusResult
+            {
+                Status = record.Status,
+                Response = record.Response
+            };
         }
     }
 }

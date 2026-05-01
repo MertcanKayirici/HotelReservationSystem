@@ -5,6 +5,7 @@ namespace HotelReservationSystem.Application.Interfaces
 {
     public interface IReservationService
     {
+        Task<ReservationStatusResult> GetStatusAsync(string requestId);
         Task CreateReservationAsync(CreateReservationDto dto);
     }
 }
