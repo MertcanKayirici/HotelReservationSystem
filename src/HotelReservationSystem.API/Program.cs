@@ -3,14 +3,13 @@ using HotelReservationSystem.Application.Services;
 using HotelReservationSystem.Application.Interfaces.Repositories;
 using HotelReservationSystem.Infrastructure.Repositories;
 using HotelReservationSystem.Infrastructure.Data;
+using HotelReservationSystem.Infrastructure.Redis;
 using Microsoft.EntityFrameworkCore;
 using HotelReservationSystem.API.Middlewares;
-using HotelReservationSystem.Infrastructure.Outbox;
 using Serilog;
-using HotelReservationSystem.Application.Interfaces;
-using HotelReservationSystem.Application.Services;
+using StackExchange.Redis;
 
-// 1. SERILOG CONFIG (builder'dan önce)
+// SERILOG
 Log.Logger = new LoggerConfiguration()
     .MinimumLevel.Information()
     .WriteTo.Console()
@@ -19,29 +18,37 @@ Log.Logger = new LoggerConfiguration()
 
 var builder = WebApplication.CreateBuilder(args);
 
-
-
-// 2. SERILOG'U BUILDER'A BAĞLA (BURASI ÖNEMLİ)
 builder.Host.UseSerilog();
 
+// 🔥 REDIS OPTIONAL (CRASH YOK)
+builder.Services.AddSingleton<IConnectionMultiplexer?>(sp =>
+{
+    try
+    {
+        return ConnectionMultiplexer.Connect("localhost:6379,abortConnect=false");
+    }
+    catch
+    {
+        return null;
+    }
+});
 
-// SERVICES
+// 🔥 SERVICES
+builder.Services.AddScoped<IRedisLockService, RedisLockService>();
+
 builder.Services.AddControllers();
 
 builder.Services.AddScoped<IReservationService, ReservationService>();
 builder.Services.AddScoped<IReservationRepository, ReservationRepository>();
-
 builder.Services.AddScoped<IOutboxService, OutboxService>();
+builder.Services.AddScoped<IIdempotencyService, IdempotencyService>();
+builder.Services.AddScoped<IReservationCoordinator, ReservationCoordinator>();
 
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
-
-builder.Services.AddScoped<IIdempotencyService, IdempotencyService>();
-
-builder.Services.AddScoped<IReservationCoordinator, ReservationCoordinator>();
 
 builder.Services.AddHostedService<OutboxWorker>();
 
@@ -54,14 +61,11 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-// Exception middleware
 app.UseMiddleware<RequestLoggingMiddleware>();
 app.UseMiddleware<ExceptionMiddleware>();
 
 app.UseHttpsRedirection();
-
 app.UseAuthorization();
-
 app.MapControllers();
 
 app.Run();

@@ -11,13 +11,16 @@ namespace HotelReservationSystem.Application.Services
     {
         private readonly IIdempotencyService _idempotency;
         private readonly IOutboxService _outbox;
+        private readonly IRedisLockService _lock;
 
         public ReservationCoordinator(
             IIdempotencyService idempotency,
-            IOutboxService outbox)
+            IOutboxService outbox,
+            IRedisLockService lockService)
         {
             _idempotency = idempotency;
             _outbox = outbox;
+            _lock = lockService;
         }
 
         public async Task HandleAsync(CreateReservationDto dto)
@@ -26,64 +29,90 @@ namespace HotelReservationSystem.Application.Services
             if (dto.CheckOut <= dto.CheckIn)
                 throw new Exception("INVALID_DATE_RANGE");
 
-            if (string.IsNullOrEmpty(dto.IdempotencyKey))
+            if (string.IsNullOrWhiteSpace(dto.IdempotencyKey))
                 throw new Exception("IDEMPOTENCY_KEY_REQUIRED");
 
-            // 🔍 IDEMPOTENCY CHECK
-            var existing = await _idempotency.GetAsync(dto.IdempotencyKey);
+            var lockKey = $"lock:room:{dto.RoomId}";
 
-            if (existing != null)
-            {
-                if (existing.Status == "PENDING")
-                    throw new Exception("IN_PROGRESS");
+            // 🔥 TOKEN'LI LOCK
+            var (acquired, token) = await _lock.AcquireLockAsync(
+                lockKey,
+                TimeSpan.FromSeconds(20)
+            );
 
-                if (existing.Status == "COMPLETED")
-                    return;
-            }
+            if (!acquired)
+                throw new Exception("ROOM_LOCKED");
 
-            // 🔹 REQUEST HASH
-            var requestHash = JsonSerializer.Serialize(new
-            {
-                dto.RoomId,
-                dto.UserId,
-                dto.CheckIn,
-                dto.CheckOut
-            });
-
-            // 🔥 CREATE IDEMPOTENCY RECORD
             try
             {
-                await _idempotency.CreateAsync(new Idempotency
+                // 🔍 IDEMPOTENCY CHECK
+                var existing = await _idempotency.GetAsync(dto.IdempotencyKey);
+
+                if (existing != null)
                 {
-                    Key = dto.IdempotencyKey,
-                    Status = "PENDING",
-                    RequestHash = requestHash,
-                    Response = "",
-                    CreatedAt = DateTime.UtcNow
+                    if (existing.Status == "PENDING")
+                        throw new Exception("IN_PROGRESS");
+
+                    if (existing.Status == "COMPLETED")
+                        return;
+                }
+
+                // 🔹 REQUEST HASH
+                var requestHash = JsonSerializer.Serialize(new
+                {
+                    dto.RoomId,
+                    dto.UserId,
+                    dto.CheckIn,
+                    dto.CheckOut
                 });
+
+                // 🔥 CREATE IDEMPOTENCY
+                try
+                {
+                    await _idempotency.CreateAsync(new Idempotency
+                    {
+                        Key = dto.IdempotencyKey,
+                        Status = "PENDING",
+                        RequestHash = requestHash,
+                        Response = "",
+                        CreatedAt = DateTime.UtcNow
+                    });
+                }
+                catch
+                {
+                    throw new Exception("IN_PROGRESS");
+                }
+
+                // 🔥 OUTBOX EVENT
+                await _outbox.AddAsync(new OutboxMessage
+                {
+                    Type = "ReservationCreated",
+                    Payload = JsonSerializer.Serialize(dto),
+                    CreatedAt = DateTime.UtcNow,
+                    Processed = false
+                });
+
+                await Task.Delay(300);
+
+                // 🔥 FINAL STATE
+                await _idempotency.UpdateStatusAsync(
+                    dto.IdempotencyKey,
+                    "COMPLETED",
+                    "Reservation created successfully"
+                );
             }
-            catch
+            finally
             {
-                throw new Exception("IN_PROGRESS");
+                try
+                {
+                    // 🔥 TOKEN İLE GÜVENLİ RELEASE
+                    await _lock.ReleaseLockAsync(lockKey, token);
+                }
+                catch
+                {
+                    // ignore
+                }
             }
-
-            // 🔥 OUTBOX EVENT (EN KRİTİK EKLEME)
-            await _outbox.AddAsync(new OutboxMessage
-            {
-                Type = "ReservationCreated",
-                Payload = JsonSerializer.Serialize(dto),
-                CreatedAt = DateTime.UtcNow,
-                Processed = false
-            });
-
-            // 🔥 FAKE PROCESS (Kafka yerine)
-            await Task.Delay(500);
-
-            await _idempotency.UpdateStatusAsync(
-                dto.IdempotencyKey,
-                "COMPLETED",
-                "Reservation created successfully"
-            );
         }
     }
 }
