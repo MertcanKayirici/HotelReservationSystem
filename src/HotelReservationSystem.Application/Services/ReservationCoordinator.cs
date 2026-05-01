@@ -72,9 +72,11 @@ namespace HotelReservationSystem.Application.Services
                         throw new Exception("ALREADY_COMPLETED");
                 }
 
+                _logger.Info("Inside UOW for {RoomId}", dto.RoomId);
+
                 await _uow.ExecuteAsync(async () =>
                 {
-                    _logger.Info("Inside UOW");
+                    _logger.Info("Inside UOW for {RoomId}", dto.RoomId);
 
                     var hasConflict = await _reservationRepository.HasConflictAsync(
                         dto.RoomId,
@@ -107,7 +109,7 @@ namespace HotelReservationSystem.Application.Services
                     _logger.Info($"Outbox created for RoomId: {dto.RoomId}");
                 });
 
-                _logger.Info("After UOW");
+                _logger.Info("After UOW for {RoomId}", dto.RoomId);
 
                 await _idempotency.UpdateStatusAsync(
                     dto.IdempotencyKey,
