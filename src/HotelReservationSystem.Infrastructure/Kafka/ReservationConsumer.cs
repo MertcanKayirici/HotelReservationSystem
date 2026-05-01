@@ -51,11 +51,18 @@ public class ReservationConsumer : BackgroundService
 
                 Console.WriteLine($"📥 EVENT: {result.Message.Value}");
 
-                var dto = JsonSerializer.Deserialize<CreateReservationDto>(result.Message.Value);
+                var dto = JsonSerializer.Deserialize<CreateReservationDto>(
+                    result.Message.Value,
+                    new JsonSerializerOptions
+                    {
+                        PropertyNameCaseInsensitive = true
+                    });
 
-                if (dto == null)
+                Console.WriteLine("🔥 KEY: " + dto?.IdempotencyKey);
+
+                if (dto == null || string.IsNullOrEmpty(dto.IdempotencyKey))
                 {
-                    Console.WriteLine("❌ DTO NULL → skip");
+                    Console.WriteLine("❌ INVALID DTO OR KEY");
                     continue;
                 }
 
@@ -87,6 +94,17 @@ public class ReservationConsumer : BackgroundService
                 });
 
                 await context.SaveChangesAsync();
+
+                var idem = await context.Idempotencies
+                        .FirstOrDefaultAsync(x => x.Key == dto.IdempotencyKey);
+
+                if (idem != null)
+                {
+                    idem.Status = "COMPLETED";
+                    idem.Response = "Reservation created successfully";
+
+                    await context.SaveChangesAsync();
+                }
 
                 Console.WriteLine("✅ DB WRITE (Consumer)");
 

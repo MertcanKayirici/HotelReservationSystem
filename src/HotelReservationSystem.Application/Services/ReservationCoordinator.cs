@@ -92,15 +92,6 @@ namespace HotelReservationSystem.Application.Services
                         CreatedAt = DateTime.UtcNow
                     });
 
-                    await _reservationRepository.AddAsync(new Reservation
-                    {
-                        RoomId = dto.RoomId,
-                        UserId = dto.UserId,
-                        CheckInDate = dto.CheckIn,
-                        CheckOutDate = dto.CheckOut
-                    });
-
-                    // 🔥 EN KRİTİK KISIM
                     await _outbox.AddAsync(new OutboxMessage
                     {
                         Type = "ReservationCreated",
@@ -113,6 +104,8 @@ namespace HotelReservationSystem.Application.Services
 
                     Console.WriteLine("📤 OUTBOX CREATED");
                 });
+
+                Console.WriteLine("✅ AFTER UOW");
 
                 Console.WriteLine("✅ AFTER UOW");
 

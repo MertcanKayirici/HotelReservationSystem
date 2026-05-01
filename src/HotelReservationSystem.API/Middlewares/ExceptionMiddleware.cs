@@ -54,6 +54,18 @@ namespace HotelReservationSystem.API.Middlewares
                     code = "IDEMPOTENCY_CONFLICT";
                     message = "Same key used with different request";
                 }
+                else if (ex.Message == "NOT_FOUND")
+                {
+                    context.Response.StatusCode = 404;
+
+                    await context.Response.WriteAsJsonAsync(new
+                    {
+                        success = false,
+                        error = "NOT_FOUND"
+                    });
+
+                    return;
+                }
 
                 context.Response.StatusCode = statusCode;
 
