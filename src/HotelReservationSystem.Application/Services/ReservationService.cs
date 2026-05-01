@@ -17,10 +17,35 @@ namespace HotelReservationSystem.Application.Services
             _idempotency = idempotency;
         }
 
+        public class AlreadyCompletedException : Exception
+        {
+            public string CachedResponse { get; }
+
+            public AlreadyCompletedException(string response)
+            {
+                CachedResponse = response;
+            }
+        }
+
         public async Task CreateReservationAsync(CreateReservationDto dto)
         {
-            await _coordinator.HandleAsync(dto);
+            try
+            {
+                await _coordinator.HandleAsync(dto);
+            }
+            catch (Exception ex) when (ex.Message == "ALREADY_COMPLETED")
+            {
+                var record = await _idempotency.GetAsync(dto.IdempotencyKey);
+
+                if (record != null)
+                {
+                    throw new AlreadyCompletedException(record.Response);
+                }
+
+                throw;
+            }
         }
+
 
         public async Task<ReservationStatusResult> GetStatusAsync(string requestId)
         {

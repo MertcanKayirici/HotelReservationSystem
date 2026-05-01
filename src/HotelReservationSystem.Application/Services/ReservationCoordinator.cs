@@ -69,7 +69,7 @@ namespace HotelReservationSystem.Application.Services
                         throw new Exception("IN_PROGRESS");
 
                     if (existing.Status == "COMPLETED")
-                        return;
+                        throw new Exception("ALREADY_COMPLETED");
                 }
 
                 await _uow.ExecuteAsync(async () =>

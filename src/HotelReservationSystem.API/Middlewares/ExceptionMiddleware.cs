@@ -1,9 +1,10 @@
 ﻿using Microsoft.AspNetCore.Http;
-using System;
 using Serilog;
+using System;
 using System.Net;
 using System.Text.Json;
 using System.Threading.Tasks;
+using static HotelReservationSystem.Application.Services.ReservationService;
 
 namespace HotelReservationSystem.API.Middlewares
 {
@@ -29,6 +30,19 @@ namespace HotelReservationSystem.API.Middlewares
                 var statusCode = StatusCodes.Status500InternalServerError;
                 var code = "INTERNAL_ERROR";
                 var message = "Something went wrong";
+
+                if (ex is AlreadyCompletedException ace)
+                {
+                    context.Response.StatusCode = 200;
+
+                    await context.Response.WriteAsJsonAsync(new
+                    {
+                        status = "COMPLETED",
+                        response = ace.CachedResponse
+                    });
+
+                    return;
+                }
 
                 if (ex.Message == "ROOM_CONFLICT")
                 {
