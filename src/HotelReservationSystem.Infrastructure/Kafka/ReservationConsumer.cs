@@ -66,6 +66,8 @@ public class ReservationConsumer : BackgroundService
                     continue;
                 }
 
+                Console.WriteLine($"🔥 CORRELATION: {dto.CorrelationId}");
+
                 using var scope = _serviceProvider.CreateScope();
                 var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 

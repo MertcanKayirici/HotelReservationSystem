@@ -20,6 +20,8 @@ namespace HotelReservationSystem.API.Controllers
         [HttpPost]
         public async Task<IActionResult> Create(CreateReservationDto dto)
         {
+            dto.CorrelationId = HttpContext.Items["CorrelationId"]?.ToString();
+
             await _service.CreateReservationAsync(dto);
 
             return Accepted(new CreateReservationResponse

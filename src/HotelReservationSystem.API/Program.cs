@@ -95,6 +95,7 @@ if (app.Environment.IsDevelopment())
 
 app.UseMiddleware<RequestLoggingMiddleware>();
 app.UseMiddleware<ExceptionMiddleware>();
+app.UseMiddleware<CorrelationMiddleware>();
 
 app.UseHttpsRedirection();
 app.UseAuthorization();

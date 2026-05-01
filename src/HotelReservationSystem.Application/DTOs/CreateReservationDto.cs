@@ -11,5 +11,7 @@ namespace HotelReservationSystem.Application.DTOs
         public DateTime CheckOut { get; set; }
 
         public string IdempotencyKey { get; set; }
+
+        public string? CorrelationId { get; set; }
     }
 }

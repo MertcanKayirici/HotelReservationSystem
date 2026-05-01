@@ -68,6 +68,8 @@ public class OutboxWorker : BackgroundService
                     {
                         Console.WriteLine($"➡ Processing ID: {msg.Id}");
 
+                        Console.WriteLine($"📤 EVENT PAYLOAD: {msg.Payload}");
+
                         if (kafkaEnabled && producer != null)
                         {
                             await producer.SendAsync(topic!, msg.Payload);
