@@ -22,9 +22,8 @@ public class IdempotencyService : IIdempotencyService
 
         entity.Status = status;
         entity.Response = response;
-
-        await _context.SaveChangesAsync();
     }
+
     public async Task<Idempotency?> GetAsync(string key)
     {
         var result = await _context.Idempotencies
@@ -39,6 +38,7 @@ public class IdempotencyService : IIdempotencyService
     public async Task CreateAsync(Idempotency entity)
     {
         await _context.Idempotencies.AddAsync(entity);
-        await _context.SaveChangesAsync();
+
+        // ❌ SaveChanges SİLİNDİ
     }
 }

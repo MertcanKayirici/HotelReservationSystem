@@ -16,11 +16,27 @@ namespace HotelReservationSystem.Infrastructure
         {
             using var transaction = await _context.Database.BeginTransactionAsync();
 
-            await action();
+            try
+            {
+                Console.WriteLine("🟡 UOW START");
 
-            await _context.SaveChangesAsync();
+                await action();
 
-            await transaction.CommitAsync();
+                Console.WriteLine("💾 SAVING...");
+
+                await _context.SaveChangesAsync();
+
+                Console.WriteLine("✅ COMMIT");
+
+                await transaction.CommitAsync();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("❌ ROLLBACK: " + ex.Message);
+
+                await transaction.RollbackAsync();
+                throw;
+            }
         }
     }
 }

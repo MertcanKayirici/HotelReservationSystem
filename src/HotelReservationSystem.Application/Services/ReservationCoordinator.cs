@@ -44,6 +44,8 @@ namespace HotelReservationSystem.Application.Services
             if (!acquired)
                 throw new Exception("ROOM_LOCKED");
 
+            Console.WriteLine("🔥 BEFORE UOW");
+
             try
             {
                 var requestHash = RequestHashHelper.Compute(new
@@ -68,9 +70,10 @@ namespace HotelReservationSystem.Application.Services
                         return;
                 }
 
-                // 🔥 TRANSACTION BLOCK
                 await _uow.ExecuteAsync(async () =>
                 {
+                    Console.WriteLine("💾 INSIDE UOW");
+
                     await _idempotency.CreateAsync(new Idempotency
                     {
                         Key = dto.IdempotencyKey,
@@ -80,7 +83,6 @@ namespace HotelReservationSystem.Application.Services
                         CreatedAt = DateTime.UtcNow
                     });
 
-                    // (normalde burası çalışmayacak)
                     await _reservationRepository.AddAsync(new Reservation
                     {
                         RoomId = dto.RoomId,
@@ -88,9 +90,24 @@ namespace HotelReservationSystem.Application.Services
                         CheckInDate = dto.CheckIn,
                         CheckOutDate = dto.CheckOut
                     });
+
+                    // 🔥 EN KRİTİK KISIM
+                    await _outbox.AddAsync(new OutboxMessage
+                    {
+                        Type = "ReservationCreated",
+                        Payload = JsonSerializer.Serialize(dto),
+                        CreatedAt = DateTime.UtcNow,
+                        Processed = false,
+                        Dead = false,
+                        RetryCount = 0
+                    });
+
+                    Console.WriteLine("📤 OUTBOX CREATED");
                 });
 
-                // 🔥 BURASI TESTTE ÇALIŞMAZ (doğru)
+                Console.WriteLine("✅ AFTER UOW");
+
+                // 🔥 artık UOW DIŞI (bilerek)
                 await _idempotency.UpdateStatusAsync(
                     dto.IdempotencyKey,
                     "COMPLETED",
