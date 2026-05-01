@@ -1,4 +1,5 @@
-﻿using HotelReservationSystem.Application.DTOs;
+﻿using HotelReservationSystem.API.Models.Responses;
+using HotelReservationSystem.Application.DTOs;
 using HotelReservationSystem.Application.Interfaces;
 using Microsoft.AspNetCore.Mvc;
 using System.Threading.Tasks;
@@ -17,15 +18,16 @@ namespace HotelReservationSystem.API.Controllers
         }
 
         [HttpPost]
-        public async Task<IActionResult> Create([FromBody] CreateReservationDto dto)
+        public async Task<IActionResult> Create(CreateReservationDto dto)
         {
             await _service.CreateReservationAsync(dto);
 
-            return Accepted(new
+            var response = new CreateReservationResponse
             {
-                status = "PENDING",
-                requestId = dto.IdempotencyKey
-            });
+                RequestId = dto.IdempotencyKey
+            };
+
+            return Accepted(response); 
         }
     }
 }
