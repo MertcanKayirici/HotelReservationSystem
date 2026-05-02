@@ -1,7 +1,8 @@
 ﻿using HotelReservationSystem.Application.Interfaces;
-using HotelReservationSystem.Domain.Entities;
-using HotelReservationSystem.Application.Interfaces.Repositories;
 using HotelReservationSystem.Application.Interfaces;
+using HotelReservationSystem.Application.Interfaces.Repositories;
+using HotelReservationSystem.Domain.Entities;
+using static HotelReservationSystem.Application.Exceptions.AuthExceptions;
 
 namespace HotelReservationSystem.Application.Services;
 
@@ -26,7 +27,7 @@ public class AuthService : IAuthService
         var existingUser = await _userRepository.GetByEmailAsync(email);
 
         if (existingUser != null)
-            throw new Exception("User already exists");
+            throw new UserAlreadyExistsException();
 
         var user = new User
         {
@@ -50,7 +51,7 @@ public class AuthService : IAuthService
         var valid = _passwordHasher.Verify(password, user.PasswordHash);
 
         if (!valid)
-            throw new Exception("Invalid credentials");
+            throw new InvalidCredentialsException();
 
         return _jwtService.GenerateToken(user);
     }

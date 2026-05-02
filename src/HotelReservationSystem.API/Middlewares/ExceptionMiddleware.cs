@@ -95,6 +95,14 @@ namespace HotelReservationSystem.API.Middlewares
                         code = "NOT_FOUND";
                         message = "Resource not found";
                         break;
+
+                    case "USER_ALREADY_EXISTS":
+                        statusCode = 409;
+                        break;
+
+                    case "INVALID_CREDENTIALS":
+                        statusCode = 401;
+                        break;
                 }
 
                 // Set resolved HTTP status code
