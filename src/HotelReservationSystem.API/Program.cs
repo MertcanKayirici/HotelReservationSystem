@@ -1,13 +1,15 @@
-﻿using HotelReservationSystem.Application.Interfaces;
-using HotelReservationSystem.Application.Services;
+﻿using HotelReservationSystem.API.Middlewares;
+using HotelReservationSystem.Application.Interfaces;
 using HotelReservationSystem.Application.Interfaces.Repositories;
+using HotelReservationSystem.Application.Services;
 using HotelReservationSystem.Infrastructure.Data;
+using HotelReservationSystem.Infrastructure.Repositories;
+using HotelReservationSystem.Infrastructure.Security;
+using HotelReservationSystem.Infrastructure.UnitOfWork;
 using Microsoft.EntityFrameworkCore;
-using HotelReservationSystem.API.Middlewares;
 using Serilog;
 using Serilog.Context;
 using StackExchange.Redis;
-using HotelReservationSystem.Infrastructure.UnitOfWork;
 
 // ------------------------------------------------------
 // Configure global Serilog logger for structured logging
@@ -89,6 +91,10 @@ builder.Services.AddScoped<IIdempotencyService, IdempotencyService>();
 builder.Services.AddScoped<IReservationCoordinator, ReservationCoordinator>();
 builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
 builder.Services.AddScoped<IAppLogger, AppLogger>();
+builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddScoped<UserRepository>();
+builder.Services.AddScoped<PasswordHasher>();
+builder.Services.AddScoped<JwtService>();
 
 // Register MVC controllers
 builder.Services.AddControllers();
