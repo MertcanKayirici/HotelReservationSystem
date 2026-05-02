@@ -1,12 +1,7 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿namespace HotelReservationSystem.Application.Interfaces;
 
-namespace HotelReservationSystem.Application.Interfaces
+public interface IAuthService
 {
-    internal class IAuthService
-    {
-    }
+    Task<string> RegisterAsync(string email, string password);
+    Task<string> LoginAsync(string email, string password);
 }
