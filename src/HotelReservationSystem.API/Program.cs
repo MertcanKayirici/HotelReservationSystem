@@ -11,6 +11,10 @@ using Serilog;
 using Serilog.Context;
 using StackExchange.Redis;
 
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.IdentityModel.Tokens;
+using System.Text;
+
 // ------------------------------------------------------
 // Configure global Serilog logger for structured logging
 // ------------------------------------------------------
@@ -106,6 +110,21 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        var key = Encoding.UTF8.GetBytes("THIS_IS_A_SUPER_LONG_SECRET_KEY_1234567890");
+
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = false,
+            ValidateAudience = false,
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+            IssuerSigningKey = new SymmetricSecurityKey(key)
+        };
+    });
+
 // ------------------------------------------------------
 // Background workers (hosted services)
 // ------------------------------------------------------
@@ -126,6 +145,8 @@ else
 // Build application
 // ------------------------------------------------------
 var app = builder.Build();
+app.UseAuthentication();
+app.UseAuthorization();
 
 Console.WriteLine("APP BUILT");
 
