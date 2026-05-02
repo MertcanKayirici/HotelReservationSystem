@@ -98,11 +98,17 @@ namespace HotelReservationSystem.API.Middlewares
 
                     case "USER_ALREADY_EXISTS":
                         statusCode = 409;
+                        code = "USER_ALREADY_EXISTS";
+                        message = "User already exists";
                         break;
 
                     case "INVALID_CREDENTIALS":
                         statusCode = 401;
+                        code = "INVALID_CREDENTIALS";
+                        message = "Email or password is incorrect";
                         break;
+
+
                 }
 
                 // Set resolved HTTP status code

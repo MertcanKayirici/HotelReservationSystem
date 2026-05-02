@@ -33,7 +33,7 @@ public class AuthService : IAuthService
         {
             Email = email,
             PasswordHash = _passwordHasher.Hash(password),
-            Role = email.Contains("admin") ? "Admin" : "User"
+            Role = "User"
         };
 
         await _userRepository.AddAsync(user);

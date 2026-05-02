@@ -1,5 +1,6 @@
 ﻿using HotelReservationSystem.Application.Interfaces;
 using HotelReservationSystem.Domain.Entities;
+using Microsoft.Extensions.Configuration;
 using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
@@ -9,7 +10,16 @@ namespace HotelReservationSystem.Infrastructure.Security;
 
 public class JwtService : IJwtService
 {
-    private readonly string _secret = "THIS_IS_A_SUPER_LONG_SECRET_KEY_1234567890"; // sonra config'e alacağız
+    private readonly string _secret;
+    private readonly int _expiryMinutes;
+
+    public JwtService(IConfiguration configuration)
+    {
+        _secret = configuration["Jwt:Key"]
+                  ?? throw new Exception("JWT Key not found");
+
+        _expiryMinutes = int.Parse(configuration["Jwt:ExpiryMinutes"] ?? "120");
+    }
 
     public string GenerateToken(User user)
     {
@@ -25,7 +35,7 @@ public class JwtService : IJwtService
 
         var token = new JwtSecurityToken(
             claims: claims,
-            expires: DateTime.UtcNow.AddHours(2),
+            expires: DateTime.UtcNow.AddMinutes(_expiryMinutes),
             signingCredentials: creds
         );
 
