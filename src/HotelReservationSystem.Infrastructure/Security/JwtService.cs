@@ -9,7 +9,7 @@ namespace HotelReservationSystem.Infrastructure.Security;
 
 public class JwtService : IJwtService
 {
-    private readonly string _secret = "SUPER_SECRET_KEY_123456"; // sonra config'e alacağız
+    private readonly string _secret = "THIS_IS_A_SUPER_LONG_SECRET_KEY_1234567890"; // sonra config'e alacağız
 
     public string GenerateToken(User user)
     {
