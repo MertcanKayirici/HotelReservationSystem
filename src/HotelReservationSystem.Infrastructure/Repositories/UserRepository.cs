@@ -1,10 +1,11 @@
-﻿using HotelReservationSystem.Domain.Entities;
+﻿using HotelReservationSystem.Application.Interfaces.Repositories;
+using HotelReservationSystem.Domain.Entities;
 using HotelReservationSystem.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 
 namespace HotelReservationSystem.Infrastructure.Repositories;
 
-public class UserRepository
+public class UserRepository : IUserRepository
 {
     private readonly AppDbContext _context;
 

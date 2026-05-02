@@ -1,12 +1,13 @@
-﻿using System.IdentityModel.Tokens.Jwt;
+﻿using HotelReservationSystem.Application.Interfaces;
+using HotelReservationSystem.Domain.Entities;
+using Microsoft.IdentityModel.Tokens;
+using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
-using Microsoft.IdentityModel.Tokens;
-using HotelReservationSystem.Domain.Entities;
 
 namespace HotelReservationSystem.Infrastructure.Security;
 
-public class JwtService
+public class JwtService : IJwtService
 {
     private readonly string _secret = "SUPER_SECRET_KEY_123456"; // sonra config'e alacağız
 

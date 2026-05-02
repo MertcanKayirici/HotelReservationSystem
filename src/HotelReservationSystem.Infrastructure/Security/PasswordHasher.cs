@@ -1,8 +1,9 @@
 ﻿using BCrypt.Net;
+using HotelReservationSystem.Application.Interfaces;
 
 namespace HotelReservationSystem.Infrastructure.Security;
 
-public class PasswordHasher
+public class PasswordHasher : IPasswordHasher
 {
     public string Hash(string password)
     {
