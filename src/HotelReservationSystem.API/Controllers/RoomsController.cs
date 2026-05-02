@@ -1,4 +1,5 @@
-﻿using HotelReservationSystem.Application.Interfaces;
+﻿using HotelReservationSystem.Application.DTOs;
+using HotelReservationSystem.Application.Interfaces;
 using Microsoft.AspNetCore.Mvc;
 
 namespace HotelReservationSystem.API.Controllers;
@@ -36,5 +37,47 @@ public class RoomsController : ControllerBase
         }
 
         return Ok(room);
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> Create([FromBody] CreateRoomDto dto)
+    {
+        var room = await _roomService.CreateAsync(dto);
+
+        return CreatedAtAction(nameof(GetById), new { id = room.Id }, room);
+    }
+
+    [HttpPut("{id:int}")]
+    public async Task<IActionResult> Update(int id, [FromBody] UpdateRoomDto dto)
+    {
+        var room = await _roomService.UpdateAsync(id, dto);
+
+        if (room is null)
+        {
+            return NotFound(new
+            {
+                code = "ROOM_NOT_FOUND",
+                message = "Room not found."
+            });
+        }
+
+        return Ok(room);
+    }
+
+    [HttpDelete("{id:int}")]
+    public async Task<IActionResult> Delete(int id)
+    {
+        var deleted = await _roomService.DeleteAsync(id);
+
+        if (!deleted)
+        {
+            return NotFound(new
+            {
+                code = "ROOM_NOT_FOUND",
+                message = "Room not found."
+            });
+        }
+
+        return NoContent();
     }
 }
