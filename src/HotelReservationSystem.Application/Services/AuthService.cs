@@ -31,7 +31,8 @@ public class AuthService : IAuthService
         var user = new User
         {
             Email = email,
-            PasswordHash = _passwordHasher.Hash(password)
+            PasswordHash = _passwordHasher.Hash(password),
+            Role = email.Contains("admin") ? "Admin" : "User"
         };
 
         await _userRepository.AddAsync(user);
