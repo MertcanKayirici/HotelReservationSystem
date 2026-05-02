@@ -1,12 +1,33 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
+﻿using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
 using System.Text;
-using System.Threading.Tasks;
+using Microsoft.IdentityModel.Tokens;
+using HotelReservationSystem.Domain.Entities;
 
-namespace HotelReservationSystem.Infrastructure.Security
+namespace HotelReservationSystem.Infrastructure.Security;
+
+public class JwtService
 {
-    internal class JwtService
+    private readonly string _secret = "SUPER_SECRET_KEY_123456"; // sonra config'e alacağız
+
+    public string GenerateToken(User user)
     {
+        var claims = new[]
+        {
+            new Claim("userId", user.Id.ToString()),
+            new Claim(ClaimTypes.Email, user.Email),
+            new Claim(ClaimTypes.Role, user.Role)
+        };
+
+        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_secret));
+        var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
+
+        var token = new JwtSecurityToken(
+            claims: claims,
+            expires: DateTime.UtcNow.AddHours(2),
+            signingCredentials: creds
+        );
+
+        return new JwtSecurityTokenHandler().WriteToken(token);
     }
 }
