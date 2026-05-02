@@ -5,28 +5,46 @@ using static HotelReservationSystem.Application.Services.ReservationService;
 
 namespace HotelReservationSystem.API.Middlewares
 {
+    /// <summary>
+    /// Global exception handling middleware responsible for catching unhandled exceptions
+    /// and returning standardized API responses.
+    /// </summary>
     public class ExceptionMiddleware
     {
+        /// <summary>
+        /// Reference to the next middleware component in the pipeline.
+        /// </summary>
         private readonly RequestDelegate _next;
 
+        /// <summary>
+        /// Initializes the middleware with the next delegate.
+        /// </summary>
+        /// <param name="next">Next middleware delegate.</param>
         public ExceptionMiddleware(RequestDelegate next)
         {
             _next = next;
         }
 
+        /// <summary>
+        /// Executes the middleware logic, wrapping the request pipeline with exception handling.
+        /// </summary>
+        /// <param name="context">Current HTTP context.</param>
         public async Task InvokeAsync(HttpContext context)
         {
             try
             {
+                // Continue request processing
                 await _next(context);
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"❌ EXCEPTION: {ex.Message}");
+                // Log exception message for debugging/monitoring purposes
+                Console.WriteLine($"EXCEPTION: {ex.Message}");
 
+                // Ensure response is returned as JSON
                 context.Response.ContentType = "application/json";
 
-                // 🔥 1. COMPLETED (cached response)
+                // Handle idempotent "already completed" scenario with cached response
                 if (ex is AlreadyCompletedException ace)
                 {
                     context.Response.StatusCode = 200;
@@ -40,11 +58,12 @@ namespace HotelReservationSystem.API.Middlewares
                     return;
                 }
 
-                // 🔥 2. DEFAULT
+                // Default error response values
                 var statusCode = 500;
                 var code = "INTERNAL_ERROR";
                 var message = "Something went wrong";
 
+                // Map known exception messages to domain-specific HTTP responses
                 switch (ex.Message)
                 {
                     case "ROOM_CONFLICT":
@@ -78,8 +97,10 @@ namespace HotelReservationSystem.API.Middlewares
                         break;
                 }
 
+                // Set resolved HTTP status code
                 context.Response.StatusCode = statusCode;
 
+                // Return standardized error response payload
                 await context.Response.WriteAsJsonAsync(new
                 {
                     success = false,
