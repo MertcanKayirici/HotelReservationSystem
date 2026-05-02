@@ -1,7 +1,7 @@
 ﻿using HotelReservationSystem.Application.Interfaces;
 using HotelReservationSystem.Infrastructure.Data;
 
-namespace HotelReservationSystem.Infrastructure
+namespace HotelReservationSystem.Infrastructure.UnitOfWork
 {
     /// <summary>
     /// Implements Unit of Work pattern to ensure transactional consistency

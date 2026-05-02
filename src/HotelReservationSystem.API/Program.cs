@@ -1,13 +1,13 @@
 ﻿using HotelReservationSystem.Application.Interfaces;
 using HotelReservationSystem.Application.Services;
 using HotelReservationSystem.Application.Interfaces.Repositories;
-using HotelReservationSystem.Infrastructure;
 using HotelReservationSystem.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using HotelReservationSystem.API.Middlewares;
 using Serilog;
 using Serilog.Context;
 using StackExchange.Redis;
+using HotelReservationSystem.Infrastructure.UnitOfWork;
 
 // ------------------------------------------------------
 // Configure global Serilog logger for structured logging

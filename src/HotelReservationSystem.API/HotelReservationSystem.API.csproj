@@ -19,7 +19,6 @@
 
   <ItemGroup>
     <Folder Include="Models\Requests\" />
-    <Folder Include="Filters\" />
     <Folder Include="Extensions\" />
   </ItemGroup>
 

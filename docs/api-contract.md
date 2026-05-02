@@ -162,6 +162,4 @@ GET /api/v1/reservations/status/{requestId}
 
 Old versions MUST remain available during migration  
 
----
 
-## 10. Flow Guarantee

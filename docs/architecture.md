@@ -1,347 +1,277 @@
-# 🏨 Hotel Reservation System — Project Folder Structure (ASP.NET Core MVC)
+# 🏨 Hotel Reservation System — Execution Guide (Developer Contract)
 
 ---
 
 ## 1. Purpose
 
-This document defines the **updated project folder structure** for:
-
-* ASP.NET Core MVC
-* MSSQL + Entity Framework Core
-* Kafka + Redis + Outbox architecture
+This document defines **HOW the system must be implemented**.
 
 ### Goals
 
-* Clear separation of concerns
-* Scalable architecture
-* Developer-friendly structure
+* Remove ambiguity
+* Guide junior developers step-by-step
 * Prevent incorrect implementation
+* Enforce clean architecture
 
 ---
 
-## 2. Solution Structure (ROOT)
+## 2. Scope
 
-```id="k2m1xp"
-HotelReservationSystem/
-│
-├── src/
-│   ├── HotelReservationSystem.API/
-│   ├── HotelReservationSystem.Application/
-│   ├── HotelReservationSystem.Domain/
-│   ├── HotelReservationSystem.Infrastructure/
-│
-├── tests/
-│   ├── HotelReservationSystem.Tests/
-│
-├── db/
-│   └── migrations/
-│
-├── scripts/
-│
-├── docs/
-│
-├── docker-compose.yml
-├── HotelReservationSystem.sln
-├── README.md
+Feature: **Create Reservation (Async + Idempotent + Safe)**
+
+---
+
+## 3. Endpoint Definition (MUST MATCH)
+
+```http
+POST /api/v1/reservations
 ```
 
----
+### Request
 
-## 3. Layered Architecture Overview
-
-| Layer          | Responsibility           |
-| -------------- | ------------------------ |
-| API            | Controllers (HTTP layer) |
-| Application    | Business logic           |
-| Domain         | Entities & core rules    |
-| Infrastructure | DB, Kafka, Redis         |
-
----
-
-## 4. API Layer (Presentation)
-
-```id="b9p8qa"
-HotelReservationSystem.API/
-│
-├── Controllers/
-│   ├── ReservationController.cs
-│   ├── AuthController.cs
-│   └── RoomController.cs
-│
-├── Models/                 # Request/Response models (DTO)
-│   ├── Requests/
-│   └── Responses/
-│
-├── Middleware/
-│   ├── ExceptionMiddleware.cs
-│   └── RequestLoggingMiddleware.cs
-│
-├── Filters/
-│
-├── Extensions/
-│   └── ServiceCollectionExtensions.cs
-│
-├── Program.cs
-└── appsettings.json
+```json
+{
+  "userId": 1,
+  "roomId": 1,
+  "checkIn": "2026-05-01",
+  "checkOut": "2026-05-05",
+  "idempotencyKey": "abc-123"
+}
 ```
 
-### Rules
+### Response
 
-**Controller MUST**
+```json
+{
+  "status": "PENDING",
+  "requestId": "abc-123"
+}
+```
 
-* Receive request
-* Validate model
-* Call Application layer
-* Return response
-
-**Controller MUST NOT**
-
-* Contain business logic
-* Access DB directly
+👉 Always return **202 Accepted**
 
 ---
 
-## 5. Application Layer (CORE LOGIC)
+## 4. Layer Responsibilities (VERY IMPORTANT)
 
-```id="y7d2xm"
-HotelReservationSystem.Application/
-│
-├── Services/
-│   ├── ReservationService.cs
-│   ├── AuthService.cs
-│   └── RoomService.cs
-│
-├── Interfaces/
-│   ├── IReservationService.cs
-│   ├── IReservationRepository.cs
-│   └── IUnitOfWork.cs
-│
-├── DTOs/
-│   ├── Reservation/
-│   ├── Auth/
-│   └── Room/
-│
-├── Validators/
-│
-└── Behaviors/
-```
+---
 
-### Responsibilities
+### 🔹 API Layer
+
+📁 `API/Controllers/ReservationsController.cs`
+
+**MUST**
+
+* Validate request (basic)
+* Call Application Service
+* Return 202 + PENDING
+
+**FORBIDDEN**
 
 * Business logic
-* Validation rules
-* Idempotency checks
-* Kafka publish calls
+* DB access
+* Kafka / Redis
 
 ---
 
-## 6. Domain Layer (CORE MODEL)
+### 🔹 Application Layer
 
-```id="y1l0qp"
-HotelReservationSystem.Domain/
-│
-├── Entities/
-│   ├── Reservation.cs
-│   ├── Room.cs
-│   └── User.cs
-│
-├── Enums/
-├── ValueObjects/
-├── Exceptions/
-└── Rules/
-```
+📁 `Application/Services/ReservationService.cs`
 
-### Responsibilities
+**MUST**
 
-* Pure business entities
-* No external dependencies
-* Core domain rules
+* Validate business rules
+* Handle idempotency
+* Send event to Kafka (via Outbox)
+* Return PENDING
+
+**FORBIDDEN**
+
+* DB transaction
+* Lock logic
 
 ---
 
-## 7. Infrastructure Layer (EXTERNAL SYSTEMS)
+### 🔴 Orchestration (GRC)
 
-```id="t0m4dx"
-HotelReservationSystem.Infrastructure/
-│
-├── Persistence/
-│   ├── DbContext/
-│   │   └── AppDbContext.cs
-│   │
-│   ├── Configurations/
-│   │   └── ReservationConfig.cs
-│   │
-│   ├── Repositories/
-│   │   └── ReservationRepository.cs
-│   │
-│   └── Migrations/
-│
-├── Kafka/
-│   ├── KafkaProducer.cs
-│   ├── KafkaConsumer.cs
-│   └── Topics.cs
-│
-├── Redis/
-│   └── RedisLockService.cs
-│
-├── Idempotency/
-│   └── IdempotencyService.cs
-│
-├── Outbox/
-│   ├── OutboxEntity.cs
-│   └── OutboxWorker.cs
-│
-└── DependencyInjection.cs
-```
+📁 `Application/Orchestration/ReservationCoordinator.cs`
 
-### Rules
+👉 **THIS IS THE HEART OF THE SYSTEM**
 
-* No business logic
-* Only external integrations
-* Implements Application interfaces
+**MUST**
+
+1. Acquire Redis lock (roomId)
+2. Start DB transaction
+3. Check conflict
+4. Insert reservation
+5. Insert outbox event
+6. Update idempotency → COMPLETED
+7. Commit transaction
+8. Release lock
+
+**FORBIDDEN**
+
+* Skipping lock
+* Partial execution
+* External calls inside transaction
 
 ---
 
-## 8. GRC (Global Reservation Coordinator)
+### 🔹 Infrastructure Layer
 
-```id="g4k8zn"
-HotelReservationSystem.Application/
-│
-└── GRC/
-    └── ReservationCoordinator.cs
-```
+📁 `Infrastructure/*`
 
-### Responsibilities
+**Contains**
 
-* Lock handling (Redis)
-* Transaction control (EF Core + MSSQL)
-* Reservation insert
-* Outbox write
-
-### Rule
-
-👉 ONLY this component can write reservation data
-
----
-
-## 9. Tests
-
-```id="c8r1ka"
-tests/
-└── HotelReservationSystem.Tests/
-    │
-    ├── Integration/
-    │   └── ReservationTests.cs
-    │
-    ├── Load/
-    │   └── k6-tests.js
-    │
-    └── Unit/
-```
-
----
-
-## 10. Database Layer
-
-```id="e1k9tr"
-db/
-└── migrations/
-```
-
-### Rule
-
-* All schema changes via EF Core migrations
-* No manual DB changes
-
----
-
-## 11. Scripts
-
-```id="p4x2wm"
-scripts/
-│
-├── seed.cs
-└── migrate.sh
-```
-
----
-
-## 12. Docs
-
-```id="f2m7lp"
-docs/
-│
-├── architecture.md
-├── execution-guide.md
-├── production-kit.md
-├── api-contract.md
-├── team-rules.md
-└── decisions/
-```
-
----
-
-## 13. Docker
-
-```id="q9v6ns"
-docker-compose.yml
-```
-
-Services:
-
-* MSSQL
-* Redis
+* DB (EF Core)
 * Kafka
+* Redis
+* Idempotency
+* Outbox
+
+**MUST**
+
+* Only external operations
+
+**FORBIDDEN**
+
+* Business logic
 
 ---
 
-## 14. Global Rules (CRITICAL)
+## 5. End-to-End Flow (MANDATORY)
+
+```
+Controller
+ → Service
+ → Idempotency (PENDING)
+ → Outbox (event stored)
+ → Worker publishes Kafka
+ → Consumer receives
+ → Coordinator (GRC)
+ → DB write
+ → Idempotency COMPLETED
+```
+
+---
+
+## 6. Idempotency Rules (CRITICAL)
+
+| State     | Behavior           |
+| --------- | ------------------ |
+| PENDING   | return IN_PROGRESS |
+| COMPLETED | return cached      |
+| FAILED    | allow retry        |
 
 ### MUST
 
-* Use layered architecture
-* Keep controllers thin
-* Business logic only in Application
-* Use GRC for reservation writes
-* Use Infrastructure for integrations
+* Same key + different payload → ERROR
 
 ---
 
-### FORBIDDEN
+## 7. Conflict Rule (IMPORTANT)
 
-* DB access from Controller
-* Business logic in Infrastructure
-* Skipping transaction control
-* Direct Kafka usage outside service
+```sql
+NOT (
+  newCheckOut <= existingCheckIn
+  OR
+  newCheckIn >= existingCheckOut
+)
+```
+
+👉 If conflict → THROW error
+
+---
+
+## 8. Kafka Rules
+
+Topics:
+
+* reservation-events
+* reservation-events-dlq
+
+Rules:
+
+* At-least-once delivery
+* Retry → then DLQ
+
+---
+
+## 9. Validation Rules
+
+* checkOut > checkIn
+* No past dates
+* Room must be active
+
+---
+
+## 10. Error Handling
+
+| Code        | HTTP |
+| ----------- | ---- |
+| INVALID     | 400  |
+| CONFLICT    | 409  |
+| IN_PROGRESS | 409  |
+| NOT_FOUND   | 404  |
+| SYSTEM      | 500  |
+
+---
+
+## 11. Logging (MANDATORY)
+
+Every step MUST log:
+
+```json
+{
+  "step": "GRC_START",
+  "roomId": 1,
+  "requestId": "abc-123"
+}
+```
+
+---
+
+## 12. Forbidden Actions (AUTO FAIL)
+
+* DB access in Controller
+* Kafka usage outside Infrastructure
+* Skipping idempotency
+* Skipping lock
+* Writing reservation outside Coordinator
+
+---
+
+## 13. Definition of Done
+
+Feature is complete ONLY IF:
+
+* Works end-to-end
+* No duplicate reservation
+* Idempotency working
+* Kafka working
+* Logs added
+* No runtime errors
+
+---
+
+## 14. For Junior Developers
+
+👉 If unsure:
+
+1. Follow the flow
+2. Do NOT invent logic
+3. Ask before changing architecture
 
 ---
 
 ## 15. Final Principle
 
-> Architecture enforces correctness.
-
-Correct structure:
-
-* prevents bugs
-* ensures consistency
-* enables scaling
+> Follow the flow. Do not improvise.
 
 ---
 
-## 16. Final Result
+## 16. Result
 
-* Clean layered system
-* Clear ownership
-* Zero ambiguity
-* Production-ready architecture
-
----
-
-## 17. Final Note
-
-This structure is **mandatory**.
-
-Violations:
-
-* break system integrity
-* will be rejected in code review
+* No double booking
+* Safe under concurrency
+* Predictable system
