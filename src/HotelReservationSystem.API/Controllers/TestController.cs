@@ -13,4 +13,11 @@ public class TestController : ControllerBase
     {
         return Ok("Giriş yaptın, burası korumalı alan");
     }
+
+    [HttpGet("admin")]
+    [Authorize(Roles = "Admin")]
+    public IActionResult AdminOnly()
+    {
+        return Ok("Admin alanı");
+    }
 }
