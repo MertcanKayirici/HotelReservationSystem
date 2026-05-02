@@ -1,20 +1,20 @@
 ﻿using HotelReservationSystem.Application.Interfaces;
 using HotelReservationSystem.Domain.Entities;
-using HotelReservationSystem.Infrastructure.Repositories;
-using HotelReservationSystem.Infrastructure.Security;
+using HotelReservationSystem.Application.Interfaces.Repositories;
+using HotelReservationSystem.Application.Interfaces;
 
 namespace HotelReservationSystem.Application.Services;
 
 public class AuthService : IAuthService
 {
-    private readonly UserRepository _userRepository;
-    private readonly PasswordHasher _passwordHasher;
-    private readonly JwtService _jwtService;
+    private readonly IUserRepository _userRepository;
+    private readonly IPasswordHasher _passwordHasher;
+    private readonly IJwtService _jwtService;
 
     public AuthService(
-        UserRepository userRepository,
-        PasswordHasher passwordHasher,
-        JwtService jwtService)
+    IUserRepository userRepository,
+    IPasswordHasher passwordHasher,
+    IJwtService jwtService)
     {
         _userRepository = userRepository;
         _passwordHasher = passwordHasher;
