@@ -1,0 +1,38 @@
+﻿@model HotelReservationSystem.Application.DTOs.CreateRoomDto
+
+@{
+    ViewData["Title"] = "Yeni Oda";
+}
+
+<div class="container mt-5" style="max-width:700px;">
+    <div class="card shadow border-0 rounded-4">
+        <div class="card-body p-4">
+            <h3 class="fw-bold mb-4">Yeni Oda Ekle</h3>
+
+            <form method="post" action="/Rooms/Create">
+                <div class="mb-3">
+                    <label class="form-label">Oda Adı</label>
+                    <input asp-for="Name" class="form-control" />
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Fiyat</label>
+                    <input asp-for="Price" class="form-control" />
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Kapasite</label>
+                    <input asp-for="Capacity" class="form-control" />
+                </div>
+
+                <div class="form-check mb-4">
+                    <input asp-for="IsActive" class="form-check-input" />
+                    <label class="form-check-label">Aktif</label>
+                </div>
+
+                <button class="btn btn-primary">Kaydet</button>
+                <a href="/Rooms" class="btn btn-secondary">Geri</a>
+            </form>
+        </div>
+    </div>
+</div>
