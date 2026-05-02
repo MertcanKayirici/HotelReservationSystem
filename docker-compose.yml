@@ -1,0 +1,90 @@
+version: '3.9'
+
+services:
+
+  # ======================================================
+  # MSSQL DATABASE SERVICE
+  # Provides SQL Server instance for application persistence
+  # ======================================================
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: hotel-sql
+    environment:
+      # قبول lisans sözleşmesi (required by MSSQL image)
+      - ACCEPT_EULA=Y
+
+      # System administrator password for SQL Server
+      - SA_PASSWORD=YourStrong!Passw0rd
+    ports:
+      # Expose SQL Server to host machine
+      - "1433:1433"
+    volumes:
+      # Persist database data across container restarts
+      - sql_data:/var/opt/mssql
+
+  # ======================================================
+  # REDIS SERVICE
+  # Used for distributed locking and caching
+  # ======================================================
+  redis:
+    image: redis:7
+    container_name: hotel-redis
+    ports:
+      # Default Redis port exposure
+      - "6379:6379"
+
+  # ======================================================
+  # ZOOKEEPER SERVICE
+  # Required dependency for Kafka cluster coordination
+  # ======================================================
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: hotel-zookeeper
+    environment:
+      # Port used by Kafka to communicate with Zookeeper
+      ZOOKEEPER_CLIENT_PORT: 2181
+
+      # Basic timing configuration
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      # Expose Zookeeper for debugging/monitoring if needed
+      - "2181:2181"
+
+  # ======================================================
+  # KAFKA SERVICE
+  # Message broker used for event-driven architecture
+  # ======================================================
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: hotel-kafka
+    depends_on:
+      # Ensure Zookeeper starts before Kafka
+      - zookeeper
+    ports:
+      # Expose Kafka broker to host
+      - "9092:9092"
+    environment:
+      # Unique broker identifier
+      KAFKA_BROKER_ID: 1
+
+      # Zookeeper connection string
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+
+      # External listener configuration (host access)
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+
+      # Internal listener binding
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092
+
+      # Replication factor for internal topics (single node setup)
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+
+      # Automatically create topics when accessed
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+
+# ======================================================
+# VOLUMES
+# Persistent storage definitions
+# ======================================================
+volumes:
+  sql_data:
