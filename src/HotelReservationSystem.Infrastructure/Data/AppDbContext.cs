@@ -33,6 +33,8 @@ namespace HotelReservationSystem.Infrastructure.Data
         /// </summary>
         public DbSet<Idempotency> Idempotencies { get; set; }
 
+        public DbSet<User> Users { get; set; }
+
         /// <summary>
         /// Configures entity mappings and applies all configurations from the assembly.
         /// </summary>
