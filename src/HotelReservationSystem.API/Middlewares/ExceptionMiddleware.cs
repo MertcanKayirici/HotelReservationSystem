@@ -107,8 +107,6 @@ namespace HotelReservationSystem.API.Middlewares
                         code = "INVALID_CREDENTIALS";
                         message = "Email or password is incorrect";
                         break;
-
-
                 }
 
                 // Set resolved HTTP status code

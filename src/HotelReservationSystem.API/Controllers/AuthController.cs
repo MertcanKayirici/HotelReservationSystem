@@ -19,22 +19,36 @@ public class AuthController : ControllerBase
     [HttpPost("register")]
     public async Task<IActionResult> Register(RegisterRequest request)
     {
+        if (!ModelState.IsValid)
+            return BadRequest(ModelState);
+
         var token = await _authService.RegisterAsync(request.Email, request.Password);
 
-        return Ok(new AuthResponse
+        return Ok(new
         {
-            Token = token
+            success = true,
+            data = new AuthResponse
+            {
+                Token = token
+            }
         });
     }
 
     [HttpPost("login")]
     public async Task<IActionResult> Login(LoginRequest request)
     {
+        if (!ModelState.IsValid)
+            return BadRequest(ModelState);
+
         var token = await _authService.LoginAsync(request.Email, request.Password);
 
-        return Ok(new AuthResponse
+        return Ok(new
         {
-            Token = token
+            success = true,
+            data = new AuthResponse
+            {
+                Token = token
+            }
         });
     }
 }
