@@ -43,7 +43,6 @@ public class AuthService : IAuthService
         return _jwtService.GenerateToken(user);
     }
 
-    // 🔥 BURASI DEĞİŞTİ
     public async Task<(string accessToken, string refreshToken)> LoginAsync(string email, string password)
     {
         var user = await _userRepository.GetByEmailAsync(email);
@@ -73,12 +72,14 @@ public class AuthService : IAuthService
         return (accessToken, refreshToken);
     }
 
-    // 🔥 YENİ METHOD
     public async Task<string> RefreshTokenAsync(string refreshToken)
     {
         var token = await _refreshTokenRepository.GetAsync(refreshToken);
 
-        if (token == null || token.ExpiresAt < DateTime.UtcNow)
+        if (token == null)
+            throw new Exception("INVALID_REFRESH_TOKEN");
+
+        if (token.ExpiresAt < DateTime.UtcNow)
             throw new Exception("INVALID_REFRESH_TOKEN");
 
         var user = await _userRepository.GetByIdAsync(token.UserId);
@@ -87,5 +88,11 @@ public class AuthService : IAuthService
             throw new Exception("USER_NOT_FOUND");
 
         return _jwtService.GenerateToken(user);
+    }
+
+    public async Task LogoutAsync(string refreshToken)
+    {
+        await _refreshTokenRepository.RevokeAsync(refreshToken);
+        await _refreshTokenRepository.SaveChangesAsync();
     }
 }

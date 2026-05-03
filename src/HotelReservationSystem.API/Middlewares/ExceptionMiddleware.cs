@@ -39,7 +39,7 @@ namespace HotelReservationSystem.API.Middlewares
             catch (Exception ex)
             {
                 // Log exception message for debugging/monitoring purposes
-                Console.WriteLine($"EXCEPTION: {ex.Message}");
+                Console.WriteLine($"EXCEPTION: {ex}");
 
                 // Ensure response is returned as JSON
                 context.Response.ContentType = "application/json";
@@ -106,6 +106,18 @@ namespace HotelReservationSystem.API.Middlewares
                         statusCode = 401;
                         code = "INVALID_CREDENTIALS";
                         message = "Email or password is incorrect";
+                        break;
+
+                    case "INVALID_REFRESH_TOKEN":
+                        statusCode = 401;
+                        code = "INVALID_REFRESH_TOKEN";
+                        message = "Refresh token is invalid";
+                        break;
+
+                    case "USER_NOT_FOUND":
+                        statusCode = 404;
+                        code = "USER_NOT_FOUND";
+                        message = "User not found";
                         break;
                 }
 

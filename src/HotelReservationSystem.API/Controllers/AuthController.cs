@@ -33,7 +33,6 @@ public class AuthController : ControllerBase
         });
     }
 
-    // 🔥 BURASI DEĞİŞTİ
     [HttpPost("login")]
     public async Task<IActionResult> Login(LoginRequest request)
     {
@@ -53,7 +52,6 @@ public class AuthController : ControllerBase
         });
     }
 
-    // 🔥 YENİ ENDPOINT
     [HttpPost("refresh")]
     public async Task<IActionResult> Refresh([FromBody] string refreshToken)
     {
@@ -66,6 +64,17 @@ public class AuthController : ControllerBase
             {
                 accessToken = newAccessToken
             }
+        });
+    }
+
+    [HttpPost("logout")]
+    public async Task<IActionResult> Logout([FromBody] string refreshToken)
+    {
+        await _authService.LogoutAsync(refreshToken);
+
+        return Ok(new
+        {
+            success = true
         });
     }
 }

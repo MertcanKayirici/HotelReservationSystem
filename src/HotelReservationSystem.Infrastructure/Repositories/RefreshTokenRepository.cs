@@ -27,4 +27,14 @@ public class RefreshTokenRepository : IRefreshTokenRepository
     {
         await _context.SaveChangesAsync();
     }
+    public async Task RevokeAsync(string token)
+    {
+        var entity = await _context.RefreshTokens
+            .FirstOrDefaultAsync(x => x.Token == token);
+
+        if (entity != null)
+        {
+            entity.IsRevoked = true;
+        }
+    }
 }
