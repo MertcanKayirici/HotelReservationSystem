@@ -1,5 +1,4 @@
 ﻿using HotelReservationSystem.API.Models.Requests;
-using HotelReservationSystem.API.Models.Responses;
 using HotelReservationSystem.Application.Interfaces;
 using Microsoft.AspNetCore.Mvc;
 
@@ -27,27 +26,45 @@ public class AuthController : ControllerBase
         return Ok(new
         {
             success = true,
-            data = new AuthResponse
+            data = new
             {
-                Token = token
+                accessToken = token
             }
         });
     }
 
+    // 🔥 BURASI DEĞİŞTİ
     [HttpPost("login")]
     public async Task<IActionResult> Login(LoginRequest request)
     {
         if (!ModelState.IsValid)
             return BadRequest(ModelState);
 
-        var token = await _authService.LoginAsync(request.Email, request.Password);
+        var result = await _authService.LoginAsync(request.Email, request.Password);
 
         return Ok(new
         {
             success = true,
-            data = new AuthResponse
+            data = new
             {
-                Token = token
+                accessToken = result.accessToken,
+                refreshToken = result.refreshToken
+            }
+        });
+    }
+
+    // 🔥 YENİ ENDPOINT
+    [HttpPost("refresh")]
+    public async Task<IActionResult> Refresh([FromBody] string refreshToken)
+    {
+        var newAccessToken = await _authService.RefreshTokenAsync(refreshToken);
+
+        return Ok(new
+        {
+            success = true,
+            data = new
+            {
+                accessToken = newAccessToken
             }
         });
     }
