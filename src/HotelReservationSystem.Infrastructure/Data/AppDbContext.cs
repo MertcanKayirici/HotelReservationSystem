@@ -35,6 +35,8 @@ namespace HotelReservationSystem.Infrastructure.Data
 
         public DbSet<User> Users { get; set; }
 
+        public DbSet<RefreshToken> RefreshTokens { get; set; }
+
         /// <summary>
         /// Configures entity mappings and applies all configurations from the assembly.
         /// </summary>
