@@ -93,6 +93,7 @@ builder.Services.AddScoped<IRoomService, RoomService>();
 
 // Register MVC controllers
 builder.Services.AddControllersWithViews();
+builder.Services.AddHttpClient();
 
 // ------------------------------------------------------
 // Swagger / OpenAPI configuration
