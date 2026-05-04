@@ -145,6 +145,8 @@ app.UseMiddleware<CorrelationMiddleware>();
 // Enforce HTTPS redirection
 app.UseHttpsRedirection();
 
+app.UseStaticFiles(); 
+
 // Authorization middleware (no authentication configured here)
 app.UseAuthorization();
 

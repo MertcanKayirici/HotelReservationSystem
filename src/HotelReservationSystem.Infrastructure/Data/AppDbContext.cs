@@ -32,6 +32,8 @@ namespace HotelReservationSystem.Infrastructure.Data
         /// Represents the Idempotencies table used for request deduplication.
         /// </summary>
         public DbSet<Idempotency> Idempotencies { get; set; }
+        
+        public DbSet<Room> Rooms { get; set; }
 
         /// <summary>
         /// Configures entity mappings and applies all configurations from the assembly.
