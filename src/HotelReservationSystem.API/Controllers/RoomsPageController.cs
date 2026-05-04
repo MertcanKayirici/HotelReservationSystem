@@ -44,4 +44,40 @@ public class RoomsPageController : Controller
 
         return RedirectToAction(nameof(Index));
     }
+    [HttpGet("Edit/{id:int}")]
+public async Task<IActionResult> Edit(int id)
+{
+    var room = await _httpClient.GetFromJsonAsync<RoomDto>(
+        $"https://localhost:7140/api/v1/Rooms/{id}");
+
+    if (room is null)
+        return NotFound();
+
+    var model = new UpdateRoomDto
+    {
+        Name = room.Name,
+        Price = room.Price,
+        Capacity = room.Capacity,
+        IsActive = room.IsActive
+    };
+
+    return View("~/Views/Rooms/Edit.cshtml", model);
+}
+
+
+[HttpPost("Edit/{id:int}")]
+public async Task<IActionResult> Edit(int id, UpdateRoomDto dto)
+{
+    var response = await _httpClient.PutAsJsonAsync(
+        $"https://localhost:7140/api/v1/Rooms/{id}",
+        dto);
+
+    if (!response.IsSuccessStatusCode)
+    {
+        ModelState.AddModelError("", "Oda güncellenemedi.");
+        return View("~/Views/Rooms/Edit.cshtml", dto);
+    }
+
+    return RedirectToAction(nameof(Index));
+}
 }
