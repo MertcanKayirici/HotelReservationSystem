@@ -18,7 +18,7 @@ public class RoomsPageController : Controller
     public async Task<IActionResult> Index()
     {
         var rooms = await _httpClient.GetFromJsonAsync<List<RoomDto>>(
-            "https://localhost:7140/api/v1/Rooms");
+           "http://localhost:5283/api/v1/Rooms");
 
         return View("~/Views/Rooms/Index.cshtml", rooms ?? new List<RoomDto>());
     }
@@ -33,8 +33,8 @@ public class RoomsPageController : Controller
     public async Task<IActionResult> Create(CreateRoomDto dto)
     {
         var response = await _httpClient.PostAsJsonAsync(
-            "https://localhost:7140/api/v1/Rooms",
-            dto);
+    "http://localhost:5283/api/v1/Rooms",
+    dto);
 
         if (!response.IsSuccessStatusCode)
         {
@@ -48,7 +48,7 @@ public class RoomsPageController : Controller
 public async Task<IActionResult> Edit(int id)
 {
     var room = await _httpClient.GetFromJsonAsync<RoomDto>(
-        $"https://localhost:7140/api/v1/Rooms/{id}");
+        $"http://localhost:5283/api/v1/Rooms/{id}");
 
     if (room is null)
         return NotFound();
@@ -69,7 +69,7 @@ public async Task<IActionResult> Edit(int id)
 public async Task<IActionResult> Edit(int id, UpdateRoomDto dto)
 {
     var response = await _httpClient.PutAsJsonAsync(
-        $"https://localhost:7140/api/v1/Rooms/{id}",
+        $"http://localhost:5283/api/v1/Rooms/{id}",
         dto);
 
     if (!response.IsSuccessStatusCode)
@@ -85,7 +85,7 @@ public async Task<IActionResult> Edit(int id, UpdateRoomDto dto)
 public async Task<IActionResult> Delete(int id)
 {
     var response = await _httpClient.DeleteAsync(
-        $"https://localhost:7140/api/v1/Rooms/{id}");
+        $"http://localhost:5283/api/v1/Rooms/{id}");
 
     if (!response.IsSuccessStatusCode)
     {
