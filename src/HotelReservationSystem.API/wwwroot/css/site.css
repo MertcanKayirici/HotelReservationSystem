@@ -1,0 +1,48 @@
+body {
+    background: linear-gradient(135deg, #f8fafc, #eef2ff);
+    min-height: 100vh;
+    font-family: "Segoe UI", Arial, sans-serif;
+}
+
+.navbar {
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.12);
+}
+
+.card {
+    border-radius: 24px !important;
+    box-shadow: 0 12px 35px rgba(15, 23, 42, 0.08) !important;
+}
+
+.btn {
+    border-radius: 12px;
+    font-weight: 600;
+}
+
+.btn-primary {
+    background: #4f46e5;
+    border-color: #4f46e5;
+}
+
+.btn-primary:hover {
+    background: #4338ca;
+    border-color: #4338ca;
+}
+
+.form-control {
+    border-radius: 14px;
+    padding: 12px 14px;
+}
+
+.form-control:focus {
+    border-color: #6366f1;
+    box-shadow: 0 0 0 0.2rem rgba(99, 102, 241, 0.18);
+}
+
+.table tbody td {
+    padding: 16px 12px;
+}
+
+.badge {
+    padding: 8px 12px;
+    border-radius: 999px;
+}
