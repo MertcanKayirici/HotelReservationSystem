@@ -28,4 +28,20 @@ public class RoomsPageController : Controller
     {
         return View("~/Views/Rooms/Create.cshtml");
     }
+
+    [HttpPost("Create")]
+    public async Task<IActionResult> Create(CreateRoomDto dto)
+    {
+        var response = await _httpClient.PostAsJsonAsync(
+            "https://localhost:7140/api/v1/Rooms",
+            dto);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            ModelState.AddModelError("", "Oda oluşturulamadı.");
+            return View("~/Views/Rooms/Create.cshtml", dto);
+        }
+
+        return RedirectToAction(nameof(Index));
+    }
 }
