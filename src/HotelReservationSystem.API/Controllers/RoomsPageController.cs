@@ -80,4 +80,22 @@ public async Task<IActionResult> Edit(int id, UpdateRoomDto dto)
 
     return RedirectToAction(nameof(Index));
 }
+
+[HttpGet("Delete/{id:int}")]
+public async Task<IActionResult> Delete(int id)
+{
+    var response = await _httpClient.DeleteAsync(
+        $"https://localhost:7140/api/v1/Rooms/{id}");
+
+    if (!response.IsSuccessStatusCode)
+    {
+        TempData["Error"] = "Oda silinemedi.";
+    }
+    else
+    {
+        TempData["Success"] = "Oda başarıyla silindi.";
+    }
+
+    return RedirectToAction(nameof(Index));
+}
 }
