@@ -190,4 +190,35 @@ public class OutboxMessageProcessorTests
         Assert.False(message.Processed);
         Assert.NotNull(message.NextRetryAt);
     }
+
+    [Fact]
+    public async Task ProcessAsync_DoesNotIncrementRetryCount_WhenCancellationIsRequested()
+    {
+        var message = CreateMessage();
+        using var cts = new CancellationTokenSource();
+
+        _producer
+            .Setup(p => p.SendAsync(
+                "reservations",
+                message.Payload,
+                It.IsAny<CancellationToken>()))
+            .Returns(() =>
+            {
+                cts.Cancel();
+                return Task.FromCanceled(cts.Token);
+            });
+
+        var processor = new OutboxMessageProcessor(
+            _producer.Object,
+            _logger.Object,
+            "reservations",
+            "reservations-dlq");
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => processor.ProcessAsync(message, cts.Token));
+
+        Assert.Equal(0, message.RetryCount);
+        Assert.False(message.Processed);
+    }
+
 }

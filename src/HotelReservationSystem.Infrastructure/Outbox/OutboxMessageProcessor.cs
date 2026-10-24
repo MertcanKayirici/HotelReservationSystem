@@ -49,6 +49,11 @@ public sealed class OutboxMessageProcessor
             message.Processed = true;
             message.NextRetryAt = null;
         }
+        catch (OperationCanceledException)
+            when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
         catch (Exception ex)
         {
             message.RetryCount++;

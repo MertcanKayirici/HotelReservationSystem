@@ -15,13 +15,13 @@
         /// Logical type of the event (e.g., ReservationCreated).
         /// Used by consumers to determine how to process the message.
         /// </summary>
-        public string Type { get; set; }
+        public required string Type { get; set; }
 
         /// <summary>
         /// Serialized payload of the event.
         /// Typically contains the data required for downstream processing.
         /// </summary>
-        public string Payload { get; set; }
+        public required string Payload { get; set; }
 
         /// <summary>
         /// Timestamp when the message was created.
