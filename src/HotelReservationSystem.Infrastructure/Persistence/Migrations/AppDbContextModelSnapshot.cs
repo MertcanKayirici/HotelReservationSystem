@@ -69,6 +69,9 @@ namespace HotelReservationSystem.Infrastructure.Migrations
                     b.Property<bool>("Dead")
                         .HasColumnType("bit");
 
+                    b.Property<DateTime?>("NextRetryAt")
+                        .HasColumnType("datetime2");
+
                     b.Property<string>("Payload")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");

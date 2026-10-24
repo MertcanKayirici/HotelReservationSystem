@@ -116,6 +116,9 @@ namespace HotelReservationSystem.Application.Services
                     // Request already completed previously
                     if (existing.Status == "COMPLETED")
                         throw new Exception("ALREADY_COMPLETED");
+
+                    if (existing.Status == "FAILED")
+                        throw new Exception("RESERVATION_FAILED");
                 }
 
                 _logger.Info("Inside UOW for {RoomId}", dto.RoomId);
@@ -124,16 +127,6 @@ namespace HotelReservationSystem.Application.Services
                 await _uow.ExecuteAsync(async () =>
                 {
                     _logger.Info("Inside UOW for {RoomId}", dto.RoomId);
-
-                    // Check for reservation conflicts within the requested date range
-                    var hasConflict = await _reservationRepository.HasConflictAsync(
-                        dto.RoomId,
-                        dto.CheckIn,
-                        dto.CheckOut
-                    );
-
-                    if (hasConflict)
-                        throw new Exception("ROOM_CONFLICT");
 
                     // Create idempotency record with initial PENDING state
                     await _idempotency.CreateAsync(new Idempotency
@@ -161,19 +154,6 @@ namespace HotelReservationSystem.Application.Services
 
                 _logger.Info("After UOW for {RoomId}", dto.RoomId);
 
-                // Update idempotency record with COMPLETED status and response payload
-                await _idempotency.UpdateStatusAsync(
-                    dto.IdempotencyKey,
-                    "COMPLETED",
-                    JsonSerializer.Serialize(new
-                    {
-                        message = "Reservation created successfully",
-                        roomId = dto.RoomId,
-                        userId = dto.UserId,
-                        checkIn = dto.CheckIn,
-                        checkOut = dto.CheckOut
-                    })
-                );
             }
             finally
             {

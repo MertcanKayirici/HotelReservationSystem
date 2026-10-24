@@ -9,7 +9,7 @@
         /// <summary>
         /// Current state of the reservation process (e.g., IN_PROGRESS, COMPLETED, FAILED).
         /// </summary>
-        public string Status { get; set; }
+        public string Status { get; set; } = string.Empty;
 
         /// <summary>
         /// Optional serialized response payload associated with the reservation.

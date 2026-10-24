@@ -40,6 +40,12 @@
         public int RetryCount { get; set; } = 0;
 
         /// <summary>
+        /// Earliest UTC time at which a failed message can be retried.
+        /// Null means the message is eligible for processing immediately.
+        /// </summary>
+        public DateTime? NextRetryAt { get; set; }
+
+        /// <summary>
         /// Indicates whether the message is considered dead (moved to DLQ or permanently failed).
         /// </summary>
         public bool Dead { get; set; } = false;

@@ -6,7 +6,7 @@ namespace HotelReservationSystem.Infrastructure.Kafka
     /// Kafka producer responsible for publishing messages to specified topics.
     /// Encapsulates Confluent.Kafka producer implementation.
     /// </summary>
-    public class KafkaProducer : IDisposable
+    public class KafkaProducer :  IKafkaProducer, IDisposable
     {
         /// <summary>
         /// Underlying Kafka producer instance.
@@ -34,17 +34,25 @@ namespace HotelReservationSystem.Infrastructure.Kafka
         /// </summary>
         /// <param name="topic">Target Kafka topic.</param>
         /// <param name="message">Message payload (serialized string).</param>
-        public async Task SendAsync(string topic, string message)
+        /// <param name="cancellationToken">Cancellation token for the operation.</param>
+        public async Task SendAsync(
+            string topic,
+            string message,
+            CancellationToken cancellationToken = default)
         {
-            // Produce message to Kafka topic
-            var result = await _producer.ProduceAsync(topic, new Message<Null, string>
-            {
-                Value = message
-            });
+            cancellationToken.ThrowIfCancellationRequested();
 
-            // Log delivery metadata for observability
+            var result = await _producer.ProduceAsync(
+                topic,
+                new Message<Null, string>
+                {
+                    Value = message
+                },
+                cancellationToken);
+
             Console.WriteLine($"Kafka delivered → {result.TopicPartitionOffset}");
         }
+
 
         /// <summary>
         /// Flushes pending messages and disposes the producer instance.

@@ -1,4 +1,6 @@
-﻿using Confluent.Kafka;
+﻿using System.Data;
+using Microsoft.EntityFrameworkCore.Storage;
+using Confluent.Kafka;
 using HotelReservationSystem.Application.DTOs;
 using HotelReservationSystem.Domain.Entities;
 using HotelReservationSystem.Infrastructure.Data;
@@ -7,161 +9,313 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using HotelReservationSystem.Infrastructure.Kafka;
 using System.Text.Json;
 
-/// <summary>
-/// Background Kafka consumer responsible for processing reservation events.
-/// Consumes messages, persists data, and updates idempotency state.
-/// </summary>
 public class ReservationConsumer : BackgroundService
 {
-    /// <summary>
-    /// Service provider used to create scoped dependencies.
-    /// </summary>
+    private readonly IKafkaProducerFactory _producerFactory;
     private readonly IServiceProvider _serviceProvider;
-
-    /// <summary>
-    /// Application configuration source.
-    /// </summary>
     private readonly IConfiguration _config;
-
-    /// <summary>
-    /// Logger for structured logging.
-    /// </summary>
     private readonly ILogger<ReservationConsumer> _logger;
 
-    /// <summary>
-    /// Initializes the consumer with required dependencies.
-    /// </summary>
     public ReservationConsumer(
-        IServiceProvider serviceProvider,
-        IConfiguration config,
-        ILogger<ReservationConsumer> logger)
+            IServiceProvider serviceProvider,
+            IConfiguration config,
+            ILogger<ReservationConsumer> logger,
+            IKafkaProducerFactory producerFactory)
+        {
+            _serviceProvider = serviceProvider;
+            _config = config;
+            _logger = logger;
+            _producerFactory = producerFactory;
+        }
+
+        private async Task<bool> SendToDlqAsync(
+        IKafkaProducer producer,
+        string dlqTopic,
+        string payload,
+        TopicPartitionOffset offset)
     {
-        _serviceProvider = serviceProvider;
-        _config = config;
-        _logger = logger;
+        try
+        {
+            await producer.SendAsync(dlqTopic, payload);
+
+            _logger.LogWarning(
+                "Message at {Offset} sent to DLQ topic {DlqTopic}.",
+                offset,
+                dlqTopic);
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(
+                ex,
+                "Failed to send message at {Offset} to DLQ topic {DlqTopic}.",
+                offset,
+                dlqTopic);
+
+            return false;
+        }
     }
 
-    /// <summary>
-    /// Main execution loop for consuming Kafka messages.
-    /// Runs continuously until cancellation is requested.
-    /// </summary>
-    /// <param name="stoppingToken">Cancellation token.</param>
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    protected override async Task ExecuteAsync(
+        CancellationToken stoppingToken)
     {
-        // Check if Kafka integration is enabled
-        var kafkaEnabled = _config.GetValue<bool>("Kafka:Enabled");
-
-        if (!kafkaEnabled)
+        if (!_config.GetValue<bool>("Kafka:Enabled"))
         {
-            _logger.LogWarning("Kafka OFF → Consumer disabled");
+            _logger.LogWarning("Kafka is disabled. Consumer will not start.");
             return;
         }
 
-        // Configure Kafka consumer
+        var dlqTopic = _config["Kafka:DlqTopic"];
+
+        if (string.IsNullOrWhiteSpace(dlqTopic))
+        {
+            _logger.LogError(
+                "Kafka DLQ topic is missing. Reservation consumer will not start.");
+            return;
+        }
+
+        var bootstrapServers = _config["Kafka:BootstrapServers"];
+        var topic = _config["Kafka:Topic"];
+
+        if (string.IsNullOrWhiteSpace(bootstrapServers) ||
+            string.IsNullOrWhiteSpace(topic))
+        {
+            _logger.LogError("Kafka bootstrap server or topic is missing.");
+            return;
+        }
+
         var consumerConfig = new ConsumerConfig
         {
-            BootstrapServers = _config["Kafka:BootstrapServers"],
+            BootstrapServers = bootstrapServers,
             GroupId = "reservation-consumer-group",
             AutoOffsetReset = AutoOffsetReset.Earliest,
             EnableAutoCommit = false
         };
 
-        // Build and subscribe consumer to topic
-        using var consumer = new ConsumerBuilder<Ignore, string>(consumerConfig).Build();
-        consumer.Subscribe(_config["Kafka:Topic"]);
+        using var consumer =
+            new ConsumerBuilder<Ignore, string>(consumerConfig).Build();
 
-        _logger.LogInformation("Consumer started");
+        IKafkaProducer? dlqProducer = null;
 
-        // Continuous consumption loop
-        while (!stoppingToken.IsCancellationRequested)
+        try
         {
-            try
+            dlqProducer = _producerFactory.Create(bootstrapServers);
+
+            consumer.Subscribe(topic);
+            _logger.LogInformation("Reservation consumer started.");
+
+            while (!stoppingToken.IsCancellationRequested)
             {
-                // Consume message from Kafka
-                var result = consumer.Consume(stoppingToken);
+                ConsumeResult<Ignore, string>? result = null;
 
-                _logger.LogInformation("Event received: {Payload}", result.Message.Value);
-
-                // Deserialize incoming payload into DTO
-                var dto = JsonSerializer.Deserialize<CreateReservationDto>(
-                    result.Message.Value,
-                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-
-                // Validate DTO integrity
-                if (dto == null || string.IsNullOrEmpty(dto.IdempotencyKey))
+                try
                 {
-                    _logger.LogError("Invalid DTO");
-                    continue;
-                }
+                    result = consumer.Consume(stoppingToken);
 
-                // Log tracing identifiers
-                _logger.LogInformation("IdempotencyKey: {Key}", dto.IdempotencyKey);
-                _logger.LogInformation("CorrelationId: {CorrelationId}", dto.CorrelationId);
+                    CreateReservationDto? dto;
 
-                // Create scoped service provider for DbContext
-                using var scope = _serviceProvider.CreateScope();
-                var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                    try
+                    {
+                        dto = JsonSerializer.Deserialize<CreateReservationDto>(
+                            result.Message.Value,
+                            new JsonSerializerOptions
+                            {
+                                PropertyNameCaseInsensitive = true
+                            });
+                    }
+                    catch (JsonException ex)
+                    {
+                        _logger.LogError(
+                            ex,
+                            "Invalid JSON in reservation event at {Offset}.",
+                            result.TopicPartitionOffset);
 
-                // Check for duplicate reservation entry to prevent double inserts
-                var exists = await context.Reservations.AnyAsync(x =>
-                    x.RoomId == dto.RoomId &&
-                    x.UserId == dto.UserId &&
-                    x.CheckInDate == dto.CheckIn &&
-                    x.CheckOutDate == dto.CheckOut
-                );
+                        var sentToDlq = await SendToDlqAsync(
+                            dlqProducer!,
+                            dlqTopic,
+                            result.Message.Value,
+                            result.TopicPartitionOffset);
 
-                if (exists)
-                {
-                    _logger.LogWarning("Duplicate event skipped");
+                        if (sentToDlq)
+                            consumer.Commit(result);
 
-                    // Commit offset to avoid re-processing
-                    consumer.Commit(result);
-                    continue;
-                }
+                        continue;
+                    }
 
-                // Persist reservation entity
-                await context.Reservations.AddAsync(new Reservation
-                {
-                    RoomId = dto.RoomId,
-                    UserId = dto.UserId,
-                    CheckInDate = dto.CheckIn,
-                    CheckOutDate = dto.CheckOut
-                });
+                    if (dto == null ||
+                        string.IsNullOrWhiteSpace(dto.IdempotencyKey) ||
+                        dto.CheckOut <= dto.CheckIn)
+                    {
+    // Buradan itibaren mevcut doğrulama kodun devam etsin.
+                        _logger.LogError(
+                            "Invalid reservation event at {Offset}.",
+                            result.TopicPartitionOffset);
 
-                await context.SaveChangesAsync();
+                        var sentToDlq = await SendToDlqAsync(
+                            dlqProducer!,
+                            dlqTopic,
+                            result.Message.Value,
+                            result.TopicPartitionOffset);
 
-                // Update idempotency record after successful processing
-                var idem = await context.Idempotencies
-                    .FirstOrDefaultAsync(x => x.Key == dto.IdempotencyKey);
+                        if (sentToDlq)
+                        {
+                            consumer.Commit(result);
+                        }
 
-                if (idem != null)
-                {
+                        continue;
+                    }
+
+                    using var scope = _serviceProvider.CreateScope();
+
+                    var context = scope.ServiceProvider
+                        .GetRequiredService<AppDbContext>();
+
+                    await using var transaction =
+                        await context.Database.BeginTransactionAsync(
+                            stoppingToken);
+
+                    var idem = await context.Idempotencies
+                        .FirstOrDefaultAsync(
+                            x => x.Key == dto.IdempotencyKey,
+                            stoppingToken);
+
+                    if (idem == null)
+                    {
+                        throw new InvalidOperationException(
+                            "Idempotency record was not found.");
+                    }
+
+                    // A previously handled event must not create another
+                    // reservation when Kafka redelivers it.
+                    if (idem.Status is "COMPLETED" or "FAILED")
+                    {
+                        await transaction.CommitAsync(stoppingToken);
+                        consumer.Commit(result);
+                        continue;
+                    }
+
+                    var connection = context.Database.GetDbConnection();
+
+                    await using var command = connection.CreateCommand();
+                    command.Transaction = context.Database
+                        .CurrentTransaction!
+                        .GetDbTransaction();
+
+                    command.CommandText = """
+                        DECLARE @result int;
+
+                        EXEC @result = sys.sp_getapplock
+                            @Resource = @resource,
+                            @LockMode = 'Exclusive',
+                            @LockOwner = 'Transaction',
+                            @LockTimeout = 10000;
+
+                        SELECT @result;
+                        """;
+
+                    var resourceParameter = command.CreateParameter();
+                    resourceParameter.ParameterName = "@resource";
+                    resourceParameter.Value = $"HotelReservation:Room:{dto.RoomId}";
+                    command.Parameters.Add(resourceParameter);
+
+                    var lockResultObject = await command.ExecuteScalarAsync(stoppingToken);
+                    var lockResult = Convert.ToInt32(lockResultObject);
+
+                    if (lockResult < 0)
+                    {
+                        throw new InvalidOperationException(
+                            $"Could not acquire room lock. SQL result: {lockResult}");
+                    }
+
+                    // Check overlapping reservations after acquiring the lock.
+                    var hasConflict = await context.Reservations.AnyAsync(x =>
+                        x.RoomId == dto.RoomId &&
+                        x.CheckInDate < dto.CheckOut &&
+                        x.CheckOutDate > dto.CheckIn,
+                        stoppingToken);
+
+                    if (hasConflict)
+                    {
+                        idem.Status = "FAILED";
+                        idem.Response = JsonSerializer.Serialize(new
+                        {
+                            code = "ROOM_CONFLICT",
+                            message = "The room is unavailable for the requested dates.",
+                            roomId = dto.RoomId,
+                            checkIn = dto.CheckIn,
+                            checkOut = dto.CheckOut
+                        });
+
+                        await context.SaveChangesAsync(stoppingToken);
+                        await transaction.CommitAsync(stoppingToken);
+
+                        // The conflict result is now durably recorded.
+                        consumer.Commit(result);
+
+                        _logger.LogWarning(
+                            "Reservation rejected due to room conflict. Key: {Key}",
+                            dto.IdempotencyKey);
+
+                        continue;
+                    }
+
+                    context.Reservations.Add(new Reservation
+                    {
+                        RoomId = dto.RoomId,
+                        UserId = dto.UserId,
+                        CheckInDate = dto.CheckIn,
+                        CheckOutDate = dto.CheckOut,
+                        CreatedAt = DateTime.UtcNow
+                    });
+
                     idem.Status = "COMPLETED";
-                    idem.Response = "Reservation created successfully";
+                    idem.Response = JsonSerializer.Serialize(new
+                    {
+                        message = "Reservation created successfully",
+                        roomId = dto.RoomId,
+                        userId = dto.UserId,
+                        checkIn = dto.CheckIn,
+                        checkOut = dto.CheckOut
+                    });
 
-                    await context.SaveChangesAsync();
+                    await context.SaveChangesAsync(stoppingToken);
+                    await transaction.CommitAsync(stoppingToken);
+
+                    // Commit Kafka offset only after the database commit.
+                    consumer.Commit(result);
+
+                    _logger.LogInformation(
+                        "Reservation completed. Key: {Key}",
+                        dto.IdempotencyKey);
                 }
-
-                _logger.LogInformation("DB write successful");
-
-                // Commit offset after successful processing
-                consumer.Commit(result);
-            }
-            catch (ConsumeException ex)
-            {
-                // Handle Kafka-specific errors
-                _logger.LogError(ex, "Kafka error");
-            }
-            catch (Exception ex)
-            {
-                // Handle general processing errors
-                _logger.LogError(ex, "Processing error");
+                catch (ConsumeException ex)
+                {
+                    _logger.LogError(ex, "Kafka consumption error.");
+                }
+                catch (OperationCanceledException)
+                    when (stoppingToken.IsCancellationRequested)
+                {
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(
+                        ex,
+                        "Error processing reservation message. Kafka offset: {Offset}",
+                        result?.TopicPartitionOffset);
+                }
             }
         }
+        finally
+        {
+            consumer.Close();
+            dlqProducer?.Dispose();
 
-        // Gracefully close consumer on shutdown
-        consumer.Close();
+            _logger.LogInformation("Reservation consumer stopped.");
+        }
     }
 }
