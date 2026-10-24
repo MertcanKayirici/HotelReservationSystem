@@ -31,15 +31,20 @@ public class ReservationConsumer : BackgroundService
             _producerFactory = producerFactory;
         }
 
-        private async Task<bool> SendToDlqAsync(
+
+    private async Task<bool> SendToDlqAsync(
         IKafkaProducer producer,
         string dlqTopic,
         string payload,
-        TopicPartitionOffset offset)
+        TopicPartitionOffset offset,
+        CancellationToken cancellationToken)
     {
         try
         {
-            await producer.SendAsync(dlqTopic, payload);
+            await producer.SendAsync(
+                dlqTopic,
+                payload,
+                cancellationToken);
 
             _logger.LogWarning(
                 "Message at {Offset} sent to DLQ topic {DlqTopic}.",
@@ -47,6 +52,10 @@ public class ReservationConsumer : BackgroundService
                 dlqTopic);
 
             return true;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
         }
         catch (Exception ex)
         {
@@ -59,6 +68,7 @@ public class ReservationConsumer : BackgroundService
             return false;
         }
     }
+
 
     protected override async Task ExecuteAsync(
         CancellationToken stoppingToken)
@@ -138,7 +148,8 @@ public class ReservationConsumer : BackgroundService
                             dlqProducer!,
                             dlqTopic,
                             result.Message.Value,
-                            result.TopicPartitionOffset);
+                            result.TopicPartitionOffset,
+                            stoppingToken);
 
                         if (sentToDlq)
                             consumer.Commit(result);
@@ -150,7 +161,6 @@ public class ReservationConsumer : BackgroundService
                         string.IsNullOrWhiteSpace(dto.IdempotencyKey) ||
                         dto.CheckOut <= dto.CheckIn)
                     {
-    // Buradan itibaren mevcut doğrulama kodun devam etsin.
                         _logger.LogError(
                             "Invalid reservation event at {Offset}.",
                             result.TopicPartitionOffset);
@@ -159,7 +169,8 @@ public class ReservationConsumer : BackgroundService
                             dlqProducer!,
                             dlqTopic,
                             result.Message.Value,
-                            result.TopicPartitionOffset);
+                            result.TopicPartitionOffset,
+                            stoppingToken);
 
                         if (sentToDlq)
                         {

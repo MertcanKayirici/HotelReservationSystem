@@ -239,6 +239,45 @@ public class ReservationCoordinatorTests
 
 
     [Fact]
+    public async Task HandleAsync_WhenUnitOfWorkFails_ReleasesRoomLock()
+    {
+        var coordinator = CreateCoordinator();
+
+        var dto = new CreateReservationDto
+        {
+            RoomId = 1,
+            UserId = 1,
+            CheckIn = new DateTime(2026, 11, 10),
+            CheckOut = new DateTime(2026, 11, 13),
+            IdempotencyKey = "uow-failure-lock-release-test"
+        };
+
+        _lock
+            .Setup(x => x.AcquireLockAsync(
+                It.IsAny<string>(),
+                It.IsAny<TimeSpan>()))
+            .ReturnsAsync((true, "lock-token"));
+
+        _idempotency
+            .Setup(x => x.GetAsync(dto.IdempotencyKey))
+            .ReturnsAsync((HotelReservationSystem.Domain.Entities.Idempotency?)null);
+
+        _uow
+            .Setup(x => x.ExecuteAsync(It.IsAny<Func<Task>>()))
+            .ThrowsAsync(new InvalidOperationException("Simulated UOW failure"));
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => coordinator.HandleAsync(dto));
+
+        Assert.Equal("Simulated UOW failure", exception.Message);
+
+        _lock.Verify(
+            x => x.ReleaseLockAsync("lock:room:1", "lock-token"),
+            Times.Once);
+    }
+
+
+    [Fact]
     public async Task HandleAsync_WhenRoomLockCannotBeAcquired_ThrowsRoomLocked()
     {
         var coordinator = CreateCoordinator();
