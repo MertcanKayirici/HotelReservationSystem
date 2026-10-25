@@ -16,6 +16,7 @@ namespace HotelReservationSystem.Infrastructure.Data
         public DbSet<Idempotency> Idempotencies { get; set; }
         public DbSet<User> Users { get; set; }
         public DbSet<RefreshToken> RefreshTokens { get; set; }
+        public DbSet<Room> Rooms { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
