@@ -147,6 +147,11 @@ public class OutboxWorker : BackgroundService
                     // Persist all changes (processed flags, retry counts, dead status)
                     await context.SaveChangesAsync(stoppingToken);
                 }
+                catch (OperationCanceledException)
+                    when (stoppingToken.IsCancellationRequested)
+                {
+                    break;
+                }
                 catch (Exception ex)
                 {
                     // Catch unexpected worker-level failures

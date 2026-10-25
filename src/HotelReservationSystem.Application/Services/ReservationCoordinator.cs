@@ -4,6 +4,7 @@ using HotelReservationSystem.Application.Interfaces;
 using HotelReservationSystem.Application.Interfaces.Repositories;
 using HotelReservationSystem.Domain.Entities;
 using System.Text.Json;
+using HotelReservationSystem.Application.Exceptions;
 
 namespace HotelReservationSystem.Application.Services
 {
@@ -124,34 +125,53 @@ namespace HotelReservationSystem.Application.Services
                 _logger.Info("Inside UOW for {RoomId}", dto.RoomId);
 
                 // Execute transactional operations
-                await _uow.ExecuteAsync(async () =>
+
+try
+{
+    await _uow.ExecuteAsync(async () =>
+    {
+        await _idempotency.CreateAsync(new Idempotency
+        {
+            Key = dto.IdempotencyKey,
+            Status = "PENDING",
+            RequestHash = requestHash,
+            Response = "",
+            CreatedAt = DateTime.UtcNow
+        });
+
+        await _outbox.AddAsync(new OutboxMessage
                 {
-                    _logger.Info("Inside UOW for {RoomId}", dto.RoomId);
-
-                    // Create idempotency record with initial PENDING state
-                    await _idempotency.CreateAsync(new Idempotency
-                    {
-                        Key = dto.IdempotencyKey,
-                        Status = "PENDING",
-                        RequestHash = requestHash,
-                        Response = "",
-                        UserId = dto.UserId,
-                        CreatedAt = DateTime.UtcNow
-                    });
-
-                    // Add reservation event to outbox for asynchronous processing
-                    await _outbox.AddAsync(new OutboxMessage
-                    {
-                        Type = "ReservationCreated",
-                        Payload = JsonSerializer.Serialize(dto),
-                        CreatedAt = DateTime.UtcNow,
-                        Processed = false,
-                        Dead = false,
-                        RetryCount = 0
-                    });
-
-                    _logger.Info($"Outbox created for RoomId: {dto.RoomId}");
+                    Type = "ReservationCreated",
+                    Payload = JsonSerializer.Serialize(dto),
+                    CreatedAt = DateTime.UtcNow,
+                    Processed = false,
+                    Dead = false,
+                    RetryCount = 0
                 });
+
+                _logger.Info($"Outbox created for RoomId: {dto.RoomId}");
+            });
+        }
+        catch (IdempotencyKeyAlreadyExistsException)
+        {
+            var conflictingRecord = await _idempotency.GetAsync(dto.IdempotencyKey);
+
+            if (conflictingRecord == null)
+                throw;
+
+            if (conflictingRecord.RequestHash != requestHash)
+                throw new Exception("IDEMPOTENCY_KEY_CONFLICT");
+
+            if (conflictingRecord.Status == "PENDING")
+                throw new Exception("IN_PROGRESS");
+
+            if (conflictingRecord.Status == "COMPLETED")
+                throw new Exception("ALREADY_COMPLETED");
+
+            if (conflictingRecord.Status == "FAILED")
+                throw new Exception("RESERVATION_FAILED");
+        }
+
 
                 _logger.Info("After UOW for {RoomId}", dto.RoomId);
 
