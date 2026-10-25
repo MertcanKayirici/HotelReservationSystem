@@ -317,4 +317,65 @@ public class ReservationCoordinatorTests
             Times.Never);
     }
 
+
+    [Fact]
+    public async Task HandleAsync_WhenIdempotencyKeyRaceOccurs_UsesExistingRecord()
+    {
+        const string key = "idempotency-race-test";
+        var coordinator = CreateCoordinator();
+
+        var dto = new CreateReservationDto
+        {
+            RoomId = 1,
+            UserId = 1,
+            CheckIn = new DateTime(2026, 11, 10),
+            CheckOut = new DateTime(2026, 11, 13),
+            IdempotencyKey = key
+        };
+
+        var requestHash = RequestHashHelper.Compute(new
+        {
+            dto.RoomId,
+            dto.UserId,
+            dto.CheckIn,
+            dto.CheckOut
+        });
+
+        var existingRecord = new HotelReservationSystem.Domain.Entities.Idempotency
+        {
+            Key = key,
+            Status = "PENDING",
+            RequestHash = requestHash,
+            Response = "",
+            CreatedAt = DateTime.UtcNow
+        };
+
+        _lock
+            .Setup(x => x.AcquireLockAsync(
+                It.IsAny<string>(),
+                It.IsAny<TimeSpan>()))
+            .ReturnsAsync((true, "lock-token"));
+
+        _idempotency
+            .SetupSequence(x => x.GetAsync(key))
+            .ReturnsAsync((HotelReservationSystem.Domain.Entities.Idempotency?)null)
+            .ReturnsAsync(existingRecord);
+
+        _uow
+            .Setup(x => x.ExecuteAsync(It.IsAny<Func<Task>>()))
+            .ThrowsAsync(new HotelReservationSystem.Application.Exceptions
+                .IdempotencyKeyAlreadyExistsException(
+                    new Exception("Simulated unique-key conflict")));
+
+        var exception = await Assert.ThrowsAsync<Exception>(
+            () => coordinator.HandleAsync(dto));
+
+        Assert.Equal("IN_PROGRESS", exception.Message);
+
+        _idempotency.Verify(x => x.GetAsync(key), Times.Exactly(2));
+
+        _lock.Verify(
+            x => x.ReleaseLockAsync("lock:room:1", "lock-token"),
+            Times.Once);
+    }
 }
