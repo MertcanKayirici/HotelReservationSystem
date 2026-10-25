@@ -1,5 +1,5 @@
 using HotelReservationSystem.Infrastructure.Kafka;
-﻿using HotelReservationSystem.Application.Interfaces;
+using HotelReservationSystem.Application.Interfaces;
 using HotelReservationSystem.Application.Services;
 using HotelReservationSystem.Application.Interfaces.Repositories;
 using HotelReservationSystem.Infrastructure.Data;
@@ -9,6 +9,12 @@ using Serilog;
 using Serilog.Context;
 using StackExchange.Redis;
 using HotelReservationSystem.Infrastructure.UnitOfWork;
+using HotelReservationSystem.Infrastructure.Repositories;
+using HotelReservationSystem.Infrastructure.Security;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.IdentityModel.Tokens;
+using System.Text;
+using Microsoft.OpenApi.Models;
 
 // ------------------------------------------------------
 // Configure global Serilog logger for structured logging
@@ -54,6 +60,35 @@ Console.WriteLine($"Kafka Enabled: {kafkaEnabled}");
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 
+var jwtKey = builder.Configuration["Jwt:Key"];
+
+if (string.IsNullOrWhiteSpace(jwtKey) ||
+    Encoding.UTF8.GetByteCount(jwtKey) < 32)
+{
+    throw new InvalidOperationException(
+        "Jwt:Key must be configured with at least 32 bytes.");
+}
+
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = false,
+            ValidateAudience = false,
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+            IssuerSigningKey = new SymmetricSecurityKey(
+                Encoding.UTF8.GetBytes(jwtKey))
+        };
+    });
+
+builder.Services.AddScoped<IUserRepository, UserRepository>();
+builder.Services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
+builder.Services.AddScoped<IPasswordHasher, PasswordHasher>();
+builder.Services.AddScoped<IJwtService, JwtService>();
+builder.Services.AddScoped<IAuthService, AuthService>();
+
 // ------------------------------------------------------
 // Redis configuration (singleton connection multiplexer)
 // ------------------------------------------------------
@@ -98,7 +133,35 @@ builder.Services.AddControllers();
 // Swagger / OpenAPI configuration
 // ------------------------------------------------------
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+
+builder.Services.AddSwaggerGen(options =>
+{
+    options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+    {
+        Name = "Authorization",
+        Type = SecuritySchemeType.Http,
+        Scheme = "bearer",
+        BearerFormat = "JWT",
+        In = ParameterLocation.Header,
+        Description = "JWT access token girin."
+    });
+
+    options.AddSecurityRequirement(new OpenApiSecurityRequirement
+    {
+        {
+            new OpenApiSecurityScheme
+            {
+                Reference = new OpenApiReference
+                {
+                    Type = ReferenceType.SecurityScheme,
+                    Id = "Bearer"
+                }
+            },
+            Array.Empty<string>()
+        }
+    });
+});
+
 
 builder.Services.AddSingleton<IKafkaProducerFactory, KafkaProducerFactory>();
 
@@ -143,10 +206,9 @@ app.UseMiddleware<RequestLoggingMiddleware>();
 app.UseMiddleware<ExceptionMiddleware>();
 app.UseMiddleware<CorrelationMiddleware>();
 
-// Enforce HTTPS redirection
 app.UseHttpsRedirection();
 
-// Authorization middleware (no authentication configured here)
+app.UseAuthentication();
 app.UseAuthorization();
 
 // Map controller endpoints

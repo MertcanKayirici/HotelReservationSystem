@@ -31,6 +31,8 @@ namespace HotelReservationSystem.Application.Interfaces
         /// <returns>Idempotency entity if found; otherwise null.</returns>
         Task<Idempotency?> GetAsync(string key);
 
+        Task<Idempotency?> GetByUserAsync(string key, int userId);
+
         /// <summary>
         /// Creates a new idempotency record for an incoming request.
         /// Typically invoked at the start of request processing.

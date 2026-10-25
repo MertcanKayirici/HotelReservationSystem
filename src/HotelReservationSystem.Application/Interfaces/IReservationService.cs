@@ -14,7 +14,7 @@ namespace HotelReservationSystem.Application.Interfaces
         /// </summary>
         /// <param name="requestId">Unique request identifier (idempotency key).</param>
         /// <returns>Reservation status result containing state and optional response data.</returns>
-        Task<ReservationStatusResult> GetStatusAsync(string requestId);
+        Task<ReservationStatusResult> GetStatusAsync(string requestId, int userId);
 
         /// <summary>
         /// Initiates the reservation creation process.

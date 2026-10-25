@@ -96,16 +96,15 @@ namespace HotelReservationSystem.Application.Services
         /// </summary>
         /// <param name="requestId">Idempotency key used to track the request.</param>
         /// <returns>Status and optional response payload.</returns>
-        public async Task<ReservationStatusResult> GetStatusAsync(string requestId)
+        public async Task<ReservationStatusResult> GetStatusAsync(
+            string requestId,
+            int userId)
         {
-            // Fetch idempotency record
-            var record = await _idempotency.GetAsync(requestId);
+            var record = await _idempotency.GetByUserAsync(requestId, userId);
 
-            // Throw if no record exists for given request
             if (record == null)
                 throw new Exception("NOT_FOUND");
 
-            // Map domain record to DTO response
             return new ReservationStatusResult
             {
                 Status = record.Status,

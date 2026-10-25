@@ -38,5 +38,11 @@
         /// Timestamp indicating when the idempotency record was created.
         /// </summary>
         public DateTime CreatedAt { get; set; }
+
+        /// <summary>
+        /// Identifier of the authenticated user who owns this request.
+        /// Null is permitted for legacy records with unknown ownership.
+        /// </summary>
+        public int? UserId { get; set; }
     }
 }

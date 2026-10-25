@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.Http;
 using System.Net;
+using HotelReservationSystem.Application.Exceptions;
 using HotelReservationSystem.Application.Services;
 using System.Threading.Tasks;
 using static HotelReservationSystem.Application.Services.ReservationService;
@@ -91,6 +92,51 @@ namespace HotelReservationSystem.API.Middlewares
                 var statusCode = 500;
                 var code = "INTERNAL_ERROR";
                 var message = "Something went wrong";
+
+                if (ex is InvalidCredentialsException ||
+                    ex is InvalidRefreshTokenException)
+                {
+                    context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+
+                    await context.Response.WriteAsJsonAsync(new
+                    {
+                        success = false,
+                        code = ex is InvalidCredentialsException
+                            ? "INVALID_CREDENTIALS"
+                            : "INVALID_REFRESH_TOKEN",
+                        message = "Authentication failed."
+                    });
+
+                    return;
+                }
+
+                if (ex is UserAlreadyExistsException)
+                {
+                    context.Response.StatusCode = StatusCodes.Status409Conflict;
+
+                    await context.Response.WriteAsJsonAsync(new
+                    {
+                        success = false,
+                        code = "USER_ALREADY_EXISTS",
+                        message = "An account with this email already exists."
+                    });
+
+                    return;
+                }
+
+                if (ex is UserNotFoundException)
+                {
+                    context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+
+                    await context.Response.WriteAsJsonAsync(new
+                    {
+                        success = false,
+                        code = "AUTHENTICATION_FAILED",
+                        message = "Authentication failed."
+                    });
+
+                    return;
+                }
 
                 // Map known exception messages to domain-specific HTTP responses
                 switch (ex.Message)
