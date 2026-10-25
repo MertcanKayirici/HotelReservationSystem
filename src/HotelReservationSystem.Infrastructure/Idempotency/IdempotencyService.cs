@@ -57,10 +57,6 @@ public class IdempotencyService : IIdempotencyService
         var result = await _context.Idempotencies
             .FirstOrDefaultAsync(x => x.Key == key);
 
-        // Debug logging for tracing lookup behavior
-        Console.WriteLine("DEBUG KEY: " + key);
-        Console.WriteLine("FOUND: " + (result != null));
-
         return result;
     }
 
@@ -75,5 +71,11 @@ public class IdempotencyService : IIdempotencyService
         await _context.Idempotencies.AddAsync(entity);
 
         // SaveChanges intentionally omitted to allow transactional control via Unit of Work
+    }
+
+    public async Task<Idempotency?> GetByUserAsync(string key, int userId)
+    {
+        return await _context.Idempotencies
+            .FirstOrDefaultAsync(x => x.Key == key && x.UserId == userId);
     }
 }

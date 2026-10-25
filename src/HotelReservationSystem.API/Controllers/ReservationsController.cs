@@ -2,6 +2,8 @@
 using HotelReservationSystem.Application.DTOs;
 using HotelReservationSystem.Application.Interfaces;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
+using System.Security.Claims;
 using System.Threading.Tasks;
 
 namespace HotelReservationSystem.API.Controllers
@@ -12,6 +14,7 @@ namespace HotelReservationSystem.API.Controllers
     /// </summary>
     [ApiController]
     [Route("api/v1/[controller]")]
+    [Authorize]
     public class ReservationsController : ControllerBase
     {
         /// <summary>
@@ -37,13 +40,16 @@ namespace HotelReservationSystem.API.Controllers
         [HttpPost]
         public async Task<IActionResult> Create(CreateReservationDto dto)
         {
-            // Attach correlation ID from the current request context for traceability across services
+            var userIdClaim = User.FindFirst("userId")?.Value;
+
+            if (!int.TryParse(userIdClaim, out var userId))
+                return Unauthorized();
+
+            dto.UserId = userId;
             dto.CorrelationId = HttpContext.Items["CorrelationId"]?.ToString();
 
-            // Trigger reservation creation process via application service layer
             await _service.CreateReservationAsync(dto);
 
-            // Return 202 Accepted with idempotency-based request identifier for status tracking
             return Accepted(new CreateReservationResponse
             {
                 RequestId = dto.IdempotencyKey
@@ -58,10 +64,13 @@ namespace HotelReservationSystem.API.Controllers
         [HttpGet("status/{requestId}")]
         public async Task<IActionResult> GetStatus(string requestId)
         {
-            // Fetch reservation status from service layer
-            var result = await _service.GetStatusAsync(requestId);
+            var userIdClaim = User.FindFirst("userId")?.Value;
 
-            // Return result directly without additional mapping to preserve service response contract
+            if (!int.TryParse(userIdClaim, out var userId))
+                return Unauthorized();
+
+            var result = await _service.GetStatusAsync(requestId, userId);
+
             return Ok(result);
         }
     }

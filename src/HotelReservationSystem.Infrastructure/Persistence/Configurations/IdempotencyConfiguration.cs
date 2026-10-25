@@ -30,6 +30,9 @@ namespace HotelReservationSystem.Infrastructure.Persistence.Configurations
             // Configure Status property as required
             builder.Property(x => x.Status)
                    .IsRequired();
+
+            builder.Property(x => x.UserId)
+                   .IsRequired(false);
         }
     }
 }

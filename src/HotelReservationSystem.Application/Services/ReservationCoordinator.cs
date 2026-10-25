@@ -135,6 +135,7 @@ namespace HotelReservationSystem.Application.Services
                         Status = "PENDING",
                         RequestHash = requestHash,
                         Response = "",
+                        UserId = dto.UserId,
                         CreatedAt = DateTime.UtcNow
                     });
 
