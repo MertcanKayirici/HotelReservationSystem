@@ -1,3 +1,4 @@
+using HotelReservationSystem.Infrastructure.Kafka;
 ﻿using HotelReservationSystem.Application.Interfaces;
 using HotelReservationSystem.Application.Services;
 using HotelReservationSystem.Application.Interfaces.Repositories;
@@ -98,6 +99,8 @@ builder.Services.AddControllers();
 // ------------------------------------------------------
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+
+builder.Services.AddSingleton<IKafkaProducerFactory, KafkaProducerFactory>();
 
 // ------------------------------------------------------
 // Background workers (hosted services)

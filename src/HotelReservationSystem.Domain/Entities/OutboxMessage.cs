@@ -15,13 +15,13 @@
         /// Logical type of the event (e.g., ReservationCreated).
         /// Used by consumers to determine how to process the message.
         /// </summary>
-        public string Type { get; set; }
+        public required string Type { get; set; }
 
         /// <summary>
         /// Serialized payload of the event.
         /// Typically contains the data required for downstream processing.
         /// </summary>
-        public string Payload { get; set; }
+        public required string Payload { get; set; }
 
         /// <summary>
         /// Timestamp when the message was created.
@@ -38,6 +38,12 @@
         /// Used for retry and failure handling strategies.
         /// </summary>
         public int RetryCount { get; set; } = 0;
+
+        /// <summary>
+        /// Earliest UTC time at which a failed message can be retried.
+        /// Null means the message is eligible for processing immediately.
+        /// </summary>
+        public DateTime? NextRetryAt { get; set; }
 
         /// <summary>
         /// Indicates whether the message is considered dead (moved to DLQ or permanently failed).

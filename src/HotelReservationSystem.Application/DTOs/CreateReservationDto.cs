@@ -33,7 +33,7 @@ namespace HotelReservationSystem.Application.DTOs
         /// Unique key used to guarantee idempotent request handling.
         /// Prevents duplicate reservation processing.
         /// </summary>
-        public string IdempotencyKey { get; set; }
+        public string IdempotencyKey { get; set; } = string.Empty;
 
         /// <summary>
         /// Correlation identifier used for tracing requests across distributed systems.

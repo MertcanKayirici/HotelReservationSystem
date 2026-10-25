@@ -29,7 +29,7 @@ namespace HotelReservationSystem.Application.Interfaces
         /// </summary>
         /// <param name="key">Unique idempotency key.</param>
         /// <returns>Idempotency entity if found; otherwise null.</returns>
-        Task<Idempotency> GetAsync(string key);
+        Task<Idempotency?> GetAsync(string key);
 
         /// <summary>
         /// Creates a new idempotency record for an incoming request.

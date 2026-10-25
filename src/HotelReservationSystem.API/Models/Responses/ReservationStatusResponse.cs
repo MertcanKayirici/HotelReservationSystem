@@ -9,7 +9,7 @@
         /// <summary>
         /// Current status of the reservation request (e.g., IN_PROGRESS, COMPLETED, FAILED).
         /// </summary>
-        public string Status { get; set; }
+        public string Status { get; set; } = string.Empty;
 
         /// <summary>
         /// Optional payload containing additional data related to the reservation.

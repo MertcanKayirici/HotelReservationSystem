@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using HotelReservationSystem.Infrastructure.Outbox;
 
 /// <summary>
 /// Background worker responsible for processing outbox messages
@@ -28,17 +29,25 @@ public class OutboxWorker : BackgroundService
     /// </summary>
     private readonly ILogger<OutboxWorker> _logger;
 
+    private readonly IKafkaProducerFactory _producerFactory;
+
+    private readonly ILoggerFactory _loggerFactory;
+
     /// <summary>
     /// Initializes the worker with required dependencies.
     /// </summary>
     public OutboxWorker(
         IServiceProvider serviceProvider,
         IConfiguration config,
-        ILogger<OutboxWorker> logger)
+        ILogger<OutboxWorker> logger,
+        IKafkaProducerFactory producerFactory,
+        ILoggerFactory loggerFactory)
     {
         _serviceProvider = serviceProvider;
         _config = config;
         _logger = logger;
+        _producerFactory = producerFactory;
+        _loggerFactory = loggerFactory;
     }
 
     /// <summary>
@@ -47,124 +56,118 @@ public class OutboxWorker : BackgroundService
     /// </summary>
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        _logger.LogInformation("Outbox Worker Started");
+        IKafkaProducer? producer = null;
 
-        // Read Kafka configuration
-        var kafkaEnabled = _config.GetValue<bool>("Kafka:Enabled");
-        var bootstrap = _config["Kafka:BootstrapServers"];
-        var topic = _config["Kafka:Topic"];
-        var dlqTopic = _config["Kafka:DlqTopic"];
-
-        _logger.LogInformation("KafkaEnabled: {KafkaEnabled}", kafkaEnabled);
-        _logger.LogInformation("Bootstrap: {Bootstrap}", bootstrap);
-
-        KafkaProducer? producer = null;
-
-        // Initialize Kafka producer if enabled
-        if (kafkaEnabled && !string.IsNullOrWhiteSpace(bootstrap))
+        try
         {
-            try
+            _logger.LogInformation("Outbox Worker Started");
+
+            // Read Kafka configuration
+            var kafkaEnabled = _config.GetValue<bool>("Kafka:Enabled");
+            var bootstrap = _config["Kafka:BootstrapServers"];
+            var topic = _config["Kafka:Topic"];
+            var dlqTopic = _config["Kafka:DlqTopic"];
+
+            _logger.LogInformation("KafkaEnabled: {KafkaEnabled}", kafkaEnabled);
+            _logger.LogInformation("Bootstrap: {Bootstrap}", bootstrap);
+
+            // Initialize Kafka producer if enabled
+            if (kafkaEnabled && !string.IsNullOrWhiteSpace(bootstrap))
             {
-                producer = new KafkaProducer(bootstrap);
-                _logger.LogInformation("Kafka initialized");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Kafka init failed");
-
-                // Disable Kafka if initialization fails
-                kafkaEnabled = false;
-            }
-        }
-
-        // Continuous processing loop
-        while (!stoppingToken.IsCancellationRequested)
-        {
-            try
-            {
-                // Create scoped DbContext
-                using var scope = _serviceProvider.CreateScope();
-                var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-
-                // Fetch unprocessed and non-dead messages (batch size: 50)
-                var messages = await context.OutboxMessages
-                    .Where(x => !x.Processed && !x.Dead)
-                    .OrderBy(x => x.CreatedAt)
-                    .Take(50)
-                    .ToListAsync(stoppingToken);
-
-                _logger.LogInformation("Found {Count} messages", messages.Count);
-
-                foreach (var msg in messages)
+                try
                 {
-                    try
+                    producer = _producerFactory.Create(bootstrap);
+                    _logger.LogInformation("Kafka initialized");
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Kafka init failed");
+
+                    // Disable Kafka if initialization fails
+                    kafkaEnabled = false;
+                }
+            }
+
+            // Continuous processing loop
+            while (!stoppingToken.IsCancellationRequested)
+            {
+                try
+                {
+                    // Create scoped DbContext
+                    using var scope = _serviceProvider.CreateScope();
+                    var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+                    var now = DateTime.UtcNow;
+
+                    var messages = await context.OutboxMessages
+                        .Where(x => !x.Processed
+                            && !x.Dead
+                            && (x.NextRetryAt == null || x.NextRetryAt <= now))
+                        .OrderBy(x => x.CreatedAt)
+                        .Take(50)
+                        .ToListAsync(stoppingToken);
+
+                    _logger.LogInformation("Found {Count} messages", messages.Count);
+
+                    foreach (var msg in messages)
                     {
-                        _logger.LogInformation("Processing message {Id}", msg.Id);
-                        _logger.LogInformation("Payload: {Payload}", msg.Payload);
+                        _logger.LogInformation(
+                            "Processing outbox message {MessageId} of type {MessageType}",
+                            msg.Id,
+                            msg.Type);
 
-                        // Send message to Kafka if enabled
-                        if (kafkaEnabled && producer != null)
+                        if (!kafkaEnabled || producer == null || string.IsNullOrWhiteSpace(topic))
                         {
-                            await producer.SendAsync(topic!, msg.Payload);
-                            _logger.LogInformation("Kafka delivered");
+                            msg.NextRetryAt = DateTime.UtcNow.AddMinutes(1);
+
+                            _logger.LogWarning(
+                                "Kafka unavailable. Outbox message {MessageId} will retry at {NextRetryAt}.",
+                                msg.Id,
+                                msg.NextRetryAt);
+
+                            continue;
                         }
-                        else
+
+                        var processor = new OutboxMessageProcessor(
+                            producer,
+                            _loggerFactory.CreateLogger<OutboxMessageProcessor>(),
+                            topic,
+                            dlqTopic);
+
+                        await processor.ProcessAsync(msg, stoppingToken);
+
+                        if (msg.Processed)
                         {
-                            // Fallback behavior when Kafka is disabled
-                            _logger.LogWarning("Kafka OFF → Fake event");
-                        }
-
-                        // Mark message as successfully processed
-                        msg.Processed = true;
-                    }
-                    catch (Exception ex)
-                    {
-                        // Increment retry count on failure
-                        msg.RetryCount++;
-
-                        _logger.LogWarning(ex, "Retry {RetryCount}", msg.RetryCount);
-
-                        // Apply exponential backoff delay
-                        var delaySeconds = Math.Pow(2, msg.RetryCount);
-                        await Task.Delay(TimeSpan.FromSeconds(delaySeconds), stoppingToken);
-
-                        // Move message to dead-letter state after max retries
-                        if (msg.RetryCount >= 5)
-                        {
-                            msg.Dead = true;
-
-                            _logger.LogError("Moved to DLQ: {Payload}", msg.Payload);
-
-                            // Attempt to send to DLQ topic if configured
-                            if (kafkaEnabled && producer != null && !string.IsNullOrWhiteSpace(dlqTopic))
-                            {
-                                try
-                                {
-                                    await producer.SendAsync(dlqTopic, msg.Payload);
-                                    _logger.LogInformation("Sent to DLQ");
-                                }
-                                catch (Exception dlqEx)
-                                {
-                                    _logger.LogError(dlqEx, "DLQ send failed");
-                                }
-                            }
+                            _logger.LogInformation(
+                                "Outbox message {MessageId} delivered to Kafka.",
+                                msg.Id);
                         }
                     }
+
+                    // Persist all changes (processed flags, retry counts, dead status)
+                    await context.SaveChangesAsync(stoppingToken);
+                }
+                catch (Exception ex)
+                {
+                    // Catch unexpected worker-level failures
+                    _logger.LogError(ex, "Worker crash");
                 }
 
-                // Persist all changes (processed flags, retry counts, dead status)
-                await context.SaveChangesAsync(stoppingToken);
+                // Delay between polling cycles
+                try
+                {
+                    await Task.Delay(2000, stoppingToken);
+                }
+                catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+                {
+                    break;
+                }
             }
-            catch (Exception ex)
-            {
-                // Catch unexpected worker-level failures
-                _logger.LogError(ex, "Worker crash");
-            }
-
-            // Delay between polling cycles
-            await Task.Delay(2000, stoppingToken);
         }
-
-        _logger.LogInformation("Outbox Worker Stopped");
+        finally
+        {
+            producer?.Dispose();
+            _logger.LogInformation("Outbox Worker Stopped");
+        }
     }
 }

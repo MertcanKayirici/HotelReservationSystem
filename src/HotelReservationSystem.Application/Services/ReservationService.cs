@@ -48,31 +48,46 @@ namespace HotelReservationSystem.Application.Services
             }
         }
 
+        public class ReservationFailedException : Exception
+        {
+            public string CachedResponse { get; }
+
+            public ReservationFailedException(string response)
+                : base("RESERVATION_FAILED")
+            {
+                CachedResponse = response;
+            }
+        }
+
         /// <summary>
         /// Initiates reservation creation process.
         /// Handles idempotency scenario where the request has already been completed.
         /// </summary>
         /// <param name="dto">Reservation request data.</param>
+
         public async Task CreateReservationAsync(CreateReservationDto dto)
         {
             try
             {
-                // Delegate full workflow to coordinator
                 await _coordinator.HandleAsync(dto);
             }
-            catch (Exception ex) when (ex.Message == "ALREADY_COMPLETED")
+            catch (Exception ex) when (
+                ex.Message == "ALREADY_COMPLETED" ||
+                ex.Message == "RESERVATION_FAILED")
             {
-                // Retrieve existing idempotency record
                 var record = await _idempotency.GetAsync(dto.IdempotencyKey);
 
-                if (record != null)
+                if (record == null)
+                    throw;
+
+                if (ex.Message == "ALREADY_COMPLETED")
                 {
-                    // Throw custom exception containing cached response
-                    throw new AlreadyCompletedException(record.Response);
+                    throw new AlreadyCompletedException(
+                        record.Response ?? string.Empty);
                 }
 
-                // Re-throw if record cannot be found (unexpected state)
-                throw;
+                throw new ReservationFailedException(
+                    record.Response ?? string.Empty);
             }
         }
 

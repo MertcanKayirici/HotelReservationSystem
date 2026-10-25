@@ -16,6 +16,6 @@
         /// Unique identifier used to track the reservation request status.
         /// Typically corresponds to an idempotency key or request correlation value.
         /// </summary>
-        public string RequestId { get; set; }
+        public string RequestId { get; set; } = string.Empty;
     }
 }

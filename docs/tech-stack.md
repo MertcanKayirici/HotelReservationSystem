@@ -1,17 +1,21 @@
-# 🏨 Hotel Reservation System — Complete Technology Stack (ASP.NET Core MVC)
+# Hotel Reservation System — Technology Stack
 
 ---
 
 ## 1. Purpose
 
-This document defines the **final and mandatory technology stack** using **C# ASP.NET Core MVC**.
+This document defines the approved technology stack and architectural constraints for the backend-only Hotel Reservation System.
 
 ### Goals
 
-* Standardize all development technologies
-* Ensure compatibility across backend and frontend
-* Enable scalable and maintainable architecture
-* Prevent technology fragmentation
+- Standardize technologies across the team
+- Preserve compatibility with the existing solution
+- Maintain clear architectural boundaries
+- Support reliable reservation processing
+- Enable optional infrastructure for local development
+- Prevent unapproved technology changes
+
+The current deliverable is a backend API. A browser-facing frontend is outside the scope of Phase 1.
 
 ---
 
@@ -19,305 +23,457 @@ This document defines the **final and mandatory technology stack** using **C# AS
 
 ### Framework
 
-* **ASP.NET Core MVC (.NET 8 preferred)**
+- ASP.NET Core Web API
+- Existing target framework: retain the version defined by the solution
+- .NET 8 is an option only if an approved migration is required and compatible with the current codebase
 
 ### Language
 
-* **C#**
+- C#
 
-### Reason
+### Principles
 
-* Strong typing (type safety)
-* Mature ecosystem
-* Built-in MVC architecture
-* Enterprise-level performance and security
+- Strong typing
+- Dependency injection
+- Asynchronous I/O where appropriate
+- Clear separation of concerns
+- Consistent API contracts
+- Maintainable and testable business logic
+
+Do not upgrade the target framework or rewrite the application architecture without Tech Lead approval.
 
 ---
 
-## 3. Database Layer
+## 3. Architecture
 
-### Primary Database
+The solution follows the existing layered architecture:
 
-* **Microsoft SQL Server (MSSQL)**
+```text
+API → Application → Domain
+Infrastructure → Application + Domain
+```
+
+### Responsibilities
+
+- **API:** HTTP endpoints, middleware, request handling and dependency injection composition
+- **Application:** use cases, application services, DTOs and abstractions
+- **Domain:** entities, invariants and core business rules
+- **Infrastructure:** persistence implementations, repositories and external integrations
+
+### Mandatory rules
+
+- API must not directly access Infrastructure implementations.
+- Application must not depend on Infrastructure implementations.
+- Domain must remain independent of the other application layers.
+- Controllers must not own business workflows.
+- Shared contracts must be coordinated before dependent changes are implemented.
+
+---
+
+## 4. Database and Persistence
+
+### Primary database
+
+- Microsoft SQL Server (MSSQL)
 
 ### ORM
 
-* **Entity Framework Core**
+- Entity Framework Core
 
-### Reason
+### Requirements
 
-* Strong integration with .NET
-* LINQ support
-* Migration support
-* Transaction management
+- Use EF Core for application persistence.
+- Track schema changes through reviewed migrations.
+- Keep entity configuration and the model snapshot consistent.
+- Use database constraints and indexes where appropriate.
+- Use explicit transaction boundaries for operations requiring atomicity.
+- Coordinate changes to `AppDbContext` and migrations with the Tech Lead.
+- Never commit production credentials or real user data.
 
----
-
-## 4. Messaging & Async Processing
-
-### Message Broker
-
-* **Apache Kafka**
-
-### .NET Client
-
-* **Confluent.Kafka**
-
-### Usage
-
-* Reservation request queue
-* Retry mechanism
-* Event-driven processing
+Repository and service responsibilities must follow the existing architecture. Business rules must not be hidden inside repositories.
 
 ---
 
-## 5. Distributed Locking
+## 5. Messaging and Asynchronous Processing
 
-### Lock System
+### Message broker
 
-* **Redis**
+- Apache Kafka
 
-### Library
+### .NET client
 
-* **StackExchange.Redis**
+- Confluent.Kafka
 
-### Usage
+### Intended usage
 
-* Room-level locking
-* Prevent concurrent reservation conflicts
+- Reservation-related domain events
+- Asynchronous event processing
+- Retry and recovery workflows
+- Integration with downstream consumers
+
+Kafka is an optional infrastructure dependency for local development.
+
+### Requirements
+
+- Kafka must be configured explicitly.
+- The application must not report successful delivery when delivery has not been confirmed.
+- Retry and failure behavior must be documented.
+- Consumers must handle duplicate delivery safely where required.
+- Pending events must not be silently discarded when Kafka is unavailable.
+
+The exact event contracts and processing guarantees are defined by the implementation and must be verified through tests.
 
 ---
 
-## 6. Outbox Pattern
+## 6. Distributed Locking
+
+### Technology
+
+- Redis
+- StackExchange.Redis
+
+### Intended usage
+
+- Distributed coordination for operations that require it
+- Room-level or reservation-level locking where justified by the concurrency design
+
+### Requirements
+
+- Lock ownership and expiration must be handled safely.
+- Lock acquisition failures must not be treated as successful acquisition.
+- Lock release must not remove another operation's lock.
+- Locking must be combined with appropriate database constraints and transaction handling.
+- An in-memory lock must not be presented as an equivalent distributed lock.
+
+Redis is optional for local development. If a required consistency guarantee cannot be provided without Redis, the operation must follow a documented safe policy.
+
+---
+
+## 7. Outbox Pattern
 
 ### Storage
 
-* MSSQL (`OutboxEvents` table)
+- MSSQL
+- EF Core-managed Outbox table
 
-### Worker
+### Processing
 
-* **BackgroundService (ASP.NET Core Hosted Service)**
+- ASP.NET Core `BackgroundService` or the existing approved background-processing implementation
 
-### Usage
+### Purpose
 
-* Ensure atomic DB + event consistency
-* Reliable event publishing
+- Persist domain events alongside the relevant database transaction
+- Prevent event loss between database commits and message publishing
+- Support retry and recovery when Kafka is unavailable
 
----
+### Requirements
 
-## 7. Frontend Technology
+- Outbox persistence must follow the transaction boundary of the operation it represents.
+- A pending event must not be deleted before the configured delivery policy permits it.
+- Retries must account for duplicate delivery.
+- Processing failures must be observable.
+- Recovery behavior must be tested.
 
-### Markup
-
-* **HTML5**
-
-### Styling
-
-* **CSS3**
-
-### UI Framework
-
-* **Bootstrap 5**
-
-### Optional Enhancements
-
-* JavaScript (vanilla or minimal usage)
-
-### Reason
-
-* Fast development
-* Responsive design
-* Clean UI without complexity
+Outbox processing must not be reported as successful merely because a record was created.
 
 ---
 
-## 8. API Layer
+## 8. API Design and Validation
 
-### Pattern
+### API pattern
 
-* MVC Controllers
+- ASP.NET Core Web API controllers
+- RESTful resource-oriented endpoints
+- Swagger / OpenAPI documentation
 
 ### Validation
 
-* **Data Annotations**
-* Model validation in controllers
+- Data Annotations where appropriate
+- Application-level validation for business rules
+- Domain invariants for core consistency requirements
+
+### Requirements
+
+- Return appropriate HTTP status codes.
+- Use DTOs instead of exposing persistence entities directly.
+- Keep controllers thin.
+- Return consistent and safe error responses.
+- Protect endpoints with explicit authentication and authorization policies.
+- Document API contracts and security requirements.
 
 ---
 
-## 9. Authentication (Phase 2)
+## 9. Authentication and Security
 
-### System
+### Technologies
 
-* **ASP.NET Core Identity** or JWT (optional)
+- JWT bearer authentication
+- Password hashing using an appropriate password-hashing implementation
+- Persisted refresh-token support where implemented
+
+### Requirements
+
+- Signing secrets must be stored outside source control.
+- Validate token signature, issuer, audience and lifetime as applicable.
+- Hash passwords; never store plaintext passwords.
+- Apply authorization policies and role checks on protected endpoints.
+- Handle refresh-token rotation and revocation securely.
+- Do not trust client-supplied roles or user identifiers as authorization evidence.
+- Do not expose stack traces, credentials or internal exception details to clients.
+
+ASP.NET Core Identity must not be introduced as a replacement for the existing authentication implementation without an approved design decision.
 
 ---
 
 ## 10. Configuration Management
 
-### Method
+### Configuration sources
 
-* **appsettings.json**
-* Environment-specific configs:
-
-  * appsettings.Development.json
-  * appsettings.Production.json
-
----
-
-## 11. Logging
-
-### Built-in Logging
-
-* **Microsoft.Extensions.Logging**
-
-### Optional
-
-* **Serilog**
+- `appsettings.json`
+- `appsettings.Development.json` where needed
+- `appsettings.Production.json` where needed
+- Environment variables
+- `.env.example` for documented local configuration
 
 ### Requirements
 
-* Structured logs
-* Include:
+- Keep secrets out of committed configuration files.
+- Use placeholder values in examples.
+- Validate required configuration at startup.
+- Document optional and required settings.
+- Keep local development configuration reproducible.
+- Ensure disabled optional integrations do not appear healthy or operational when they are not.
 
-  * RequestId
-  * UserId
-  * Step
+Configuration names must remain consistent across code, Docker Compose and documentation.
+
+---
+
+## 11. Logging and Observability
+
+### Logging
+
+- Microsoft.Extensions.Logging
+- Serilog only if approved and needed
+
+### Requirements
+
+Logs should provide useful operational context, such as:
+
+- Request or correlation ID
+- Operation or processing step
+- Relevant entity identifier where appropriate
+- Outcome and failure category
+- Retry information for background processing
+
+User identifiers must be logged only when necessary and appropriate.
+
+Never log passwords, access tokens, refresh tokens, signing secrets or sensitive personal data.
+
+Health checks must accurately represent the status of required and optional dependencies.
 
 ---
 
 ## 12. Testing
 
-### Unit / Integration Testing
+### Unit testing
 
-* **xUnit**
+- xUnit, if compatible with the existing test solution
 
-### HTTP Testing
+### API integration testing
 
-* **Microsoft.AspNetCore.Mvc.Testing**
+- Microsoft.AspNetCore.Mvc.Testing, where appropriate
 
-### Load Testing
+### Load testing
 
-* **k6**
+- k6, as a later-stage or explicitly approved testing tool
+
+### Required coverage
+
+- Authentication and authorization
+- Room management and validation
+- Reservation availability and date-overlap rules
+- Idempotency and repeated requests
+- Concurrent reservation attempts
+- Database transaction and rollback behavior
+- Redis enabled, disabled and failure scenarios
+- Kafka unavailable and recovery scenarios
+- Outbox retry and duplicate-delivery behavior
+- API error responses and configuration failures
+
+Tests must verify actual system guarantees rather than assume that optional infrastructure is available.
 
 ---
 
 ## 13. Containerization
 
-### Tools
+### Technologies
 
-* **Docker**
-* **Docker Compose**
+- Docker
+- Docker Compose
 
-### Services
+### Potential services
 
-* MSSQL
-* Redis
-* Kafka
+- ASP.NET Core API
+- MSSQL
+- Redis
+- Kafka and its required supporting services
+
+### Requirements
+
+- Document the minimum local development setup.
+- Make optional services configurable.
+- Do not require every developer to install Kafka and Redis just to work on independent API features.
+- Keep secrets out of committed Compose configuration.
+- Provide health checks and startup dependencies where appropriate.
+- Document database initialization and migration procedures.
+
+The supported configuration must be tested rather than inferred from the presence of a Compose file.
 
 ---
 
 ## 14. Code Quality
 
-### Formatting & Analysis
+### Tools
 
-* **.NET built-in analyzers**
-* **StyleCop (optional)**
+- .NET built-in analyzers
+- `dotnet format`
+- StyleCop only if explicitly adopted by the team
+
+### Requirements
+
+- Consistent naming and formatting
+- Clear abstractions
+- No unnecessary dependencies
+- No duplicate business logic
+- Reviewable and focused changes
+- No unrelated refactoring in feature pull requests
+
+New tooling must have a clear benefit and be approved before becoming mandatory.
 
 ---
 
-## 15. Version Control
+## 15. Version Control and Collaboration
 
-### System
+### Tools
 
-* **Git**
+- Git
+- GitHub
 
-### Platform
+### Branch strategy
 
-* **GitHub**
+- `main`: protected integration and release baseline
+- `feature/*`: feature development
+- `fix/*`: bug fixes
+- `chore/*`: maintenance and documentation
+
+### Requirements
+
+- No direct pushes to `main`.
+- Every code change must use a pull request.
+- Shared files require coordination.
+- Existing tags and `main` history must not be rewritten.
+- Pull requests must include scope, impact and testing evidence.
 
 ---
 
 ## 16. Development Tools
 
-### IDE
+- Visual Studio or Visual Studio Code
+- .NET SDK compatible with the solution
+- NuGet
+- SQL Server tooling appropriate to the environment
+- Git and GitHub
 
-* **Visual Studio / Visual Studio Code**
-
-### Package Manager
-
-* **NuGet**
-
----
-
-## 17. Optional (Phase 2+)
-
-* Swagger (API documentation)
-* SignalR (real-time updates)
-* Background job tools (Hangfire)
-* Monitoring (Prometheus + Grafana)
+All developers must be able to follow the documented setup without requiring undocumented local configuration.
 
 ---
 
-## 18. Infrastructure Summary
+## 17. Out of Scope for Phase 1
 
-| Layer     | Technology                 |
-| --------- | -------------------------- |
-| Backend   | ASP.NET Core MVC           |
-| Language  | C#                         |
-| Database  | MSSQL                      |
-| ORM       | Entity Framework Core      |
-| Messaging | Kafka                      |
-| Locking   | Redis                      |
-| Frontend  | HTML5 + CSS3 + Bootstrap 5 |
-| Logging   | Built-in / Serilog         |
-| Testing   | xUnit + k6                 |
-| Container | Docker                     |
+The following are not part of the current backend deliverable:
+
+- HTML and CSS application pages
+- Bootstrap layouts
+- Razor Views
+- MVC page controllers
+- Browser-based reservation forms
+- SignalR-based UI updates
+- Frontend frameworks
+
+Swagger remains in scope for API documentation and testing.
+
+Additional monitoring, dashboards or background-processing tools may be considered later but are not mandatory without approval.
+
+---
+
+## 18. Technology Summary
+
+| Layer | Approved technology |
+|---|---|
+| Backend | ASP.NET Core Web API |
+| Language | C# |
+| Database | Microsoft SQL Server |
+| ORM | Entity Framework Core |
+| Messaging | Apache Kafka / Confluent.Kafka |
+| Distributed coordination | Redis / StackExchange.Redis |
+| Reliable event persistence | MSSQL Outbox |
+| Background processing | ASP.NET Core BackgroundService or existing approved implementation |
+| Authentication | JWT bearer authentication |
+| API documentation | Swagger / OpenAPI |
+| Logging | Microsoft.Extensions.Logging |
+| Testing | Existing test framework; xUnit where approved |
+| HTTP integration testing | Microsoft.AspNetCore.Mvc.Testing where appropriate |
+| Load testing | k6 when required |
+| Containerization | Docker / Docker Compose |
+| Version control | Git / GitHub |
 
 ---
 
 ## 19. Critical Rules
 
-### MUST
+### Mandatory
 
-* Use ASP.NET Core MVC architecture
-* Use MSSQL + EF Core for all data access
-* Use Kafka for async processing
-* Use Redis for locking
-* Use Outbox pattern
-* Follow layered architecture
+- Preserve the approved layered architecture.
+- Use MSSQL and EF Core for application persistence.
+- Protect reservation consistency and idempotency guarantees.
+- Use Outbox processing for the approved reliable event-delivery workflow.
+- Treat Kafka and Redis failures explicitly.
+- Keep secrets outside source control.
+- Test relevant failure paths.
+- Obtain Tech Lead approval for changes to shared architecture and core behavior.
 
----
+### Forbidden
 
-### FORBIDDEN
-
-* Direct DB access outside service/repository
-* Business logic in controllers
-* Skipping idempotency
-* Mixing frontend logic into backend
-
----
-
-## 20. Final Principle
-
-> One system → one stack → strict consistency.
-
----
-
-## 21. Final Result
-
-* Clean architecture
-* Strong typing
-* Scalable backend
-* Maintainable frontend
-* Production-ready system
+- Direct database access from controllers
+- Business workflows inside controllers
+- Uncoordinated schema or migration changes
+- Silent loss of pending events
+- Unsafe fallback locking
+- Reporting unconfirmed external operations as successful
+- Skipping required idempotency
+- Mixing frontend work into backend deliverables
+- Unapproved replacement of the existing framework or authentication design
 
 ---
 
-## 22. Final Note
+## 20. Technology Change Policy
 
-Technology stack is **locked for Phase 1**.
+The technology stack is locked for Phase 1.
 
-Any changes:
+Any change must:
 
-* require Tech Lead approval
-* must provide measurable benefit
+1. Be proposed by the responsible developer.
+2. Explain the problem being solved.
+3. Identify compatibility and migration risks.
+4. Demonstrate a measurable benefit.
+5. Be approved by the Tech Lead before implementation.
+
+No technology change may silently break API contracts, data consistency or the existing integration baseline.
+
+---
+
+## 21. Final Principle
+
+> One backend system, one agreed technology stack, explicit contracts and controlled integration.
+
+The objective is a maintainable, testable and reliable backend. Production readiness must be demonstrated through implementation, tests, configuration verification and documented operational behavior.

@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.Http;
 using System.Net;
+using HotelReservationSystem.Application.Services;
 using System.Threading.Tasks;
 using static HotelReservationSystem.Application.Services.ReservationService;
 
@@ -58,6 +59,34 @@ namespace HotelReservationSystem.API.Middlewares
                     return;
                 }
 
+                if (ex is ReservationFailedException rfe)
+                {
+                    context.Response.StatusCode = 409;
+                    context.Response.ContentType = "application/json";
+
+                    object? cachedResult;
+
+                    try
+                    {
+                        cachedResult = System.Text.Json.JsonSerializer
+                            .Deserialize<object>(rfe.CachedResponse);
+                    }
+                    catch (System.Text.Json.JsonException)
+                    {
+                        cachedResult = rfe.CachedResponse;
+                    }
+
+                    await context.Response.WriteAsJsonAsync(new
+                    {
+                        success = false,
+                        code = "RESERVATION_FAILED",
+                        message = "This reservation request previously failed.",
+                        previousResponse = cachedResult
+                    });
+
+                    return;
+                }
+
                 // Default error response values
                 var statusCode = 500;
                 var code = "INTERNAL_ERROR";
@@ -66,6 +95,24 @@ namespace HotelReservationSystem.API.Middlewares
                 // Map known exception messages to domain-specific HTTP responses
                 switch (ex.Message)
                 {
+                    case "RESERVATION_FAILED":
+                    statusCode = 409;
+                    code = "RESERVATION_FAILED";
+                    message = "This reservation request previously failed. Check its status for details.";
+                    break;
+
+                    case "INVALID_DATE_RANGE":
+                        statusCode = 400;
+                        code = "INVALID_DATE_RANGE";
+                        message = "Check-out date must be later than check-in date";
+                        break;
+
+                    case "IDEMPOTENCY_KEY_REQUIRED":
+                        statusCode = 400;
+                        code = "IDEMPOTENCY_KEY_REQUIRED";
+                        message = "An idempotency key is required";
+                        break;
+
                     case "ROOM_CONFLICT":
                         statusCode = 409;
                         code = "ROOM_CONFLICT";
