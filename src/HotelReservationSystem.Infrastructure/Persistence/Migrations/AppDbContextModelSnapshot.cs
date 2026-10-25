@@ -154,6 +154,33 @@ namespace HotelReservationSystem.Infrastructure.Migrations
                     b.ToTable("Reservations");
                 });
 
+            modelBuilder.Entity("HotelReservationSystem.Domain.Entities.Room", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("Capacity")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("IsAvailable")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<decimal>("PricePerNight")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("Rooms", (string)null);
+                });
+
             modelBuilder.Entity("HotelReservationSystem.Domain.Entities.User", b =>
                 {
                     b.Property<int>("Id")
