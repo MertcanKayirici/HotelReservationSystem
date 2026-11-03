@@ -25,6 +25,10 @@ namespace HotelReservationSystem.Infrastructure.Persistence.Configurations
 
             builder.Property(room => room.IsAvailable)
                 .IsRequired();
+
+            builder.Property(room => room.IsActive)
+    .IsRequired()
+    .HasDefaultValue(true);
         }
     }
 }

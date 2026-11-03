@@ -1,15 +1,16 @@
-﻿using System.Data;
-using Microsoft.EntityFrameworkCore.Storage;
+﻿
 using Confluent.Kafka;
 using HotelReservationSystem.Application.DTOs;
 using HotelReservationSystem.Domain.Entities;
 using HotelReservationSystem.Infrastructure.Data;
+using HotelReservationSystem.Infrastructure.Kafka;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using HotelReservationSystem.Infrastructure.Kafka;
+using System.Data;
 using System.Text.Json;
 
 public class ReservationConsumer : BackgroundService
@@ -20,17 +21,16 @@ public class ReservationConsumer : BackgroundService
     private readonly ILogger<ReservationConsumer> _logger;
 
     public ReservationConsumer(
-            IServiceProvider serviceProvider,
-            IConfiguration config,
-            ILogger<ReservationConsumer> logger,
-            IKafkaProducerFactory producerFactory)
-        {
-            _serviceProvider = serviceProvider;
-            _config = config;
-            _logger = logger;
-            _producerFactory = producerFactory;
-        }
-
+        IServiceProvider serviceProvider,
+        IConfiguration config,
+        ILogger<ReservationConsumer> logger,
+        IKafkaProducerFactory producerFactory)
+    {
+        _serviceProvider = serviceProvider;
+        _config = config;
+        _logger = logger;
+        _producerFactory = producerFactory;
+    }
 
     private async Task<bool> SendToDlqAsync(
         IKafkaProducer producer,
@@ -53,7 +53,8 @@ public class ReservationConsumer : BackgroundService
 
             return true;
         }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        catch (OperationCanceledException)
+            when (cancellationToken.IsCancellationRequested)
         {
             throw;
         }
@@ -69,13 +70,13 @@ public class ReservationConsumer : BackgroundService
         }
     }
 
-
     protected override async Task ExecuteAsync(
         CancellationToken stoppingToken)
     {
         if (!_config.GetValue<bool>("Kafka:Enabled"))
         {
-            _logger.LogWarning("Kafka is disabled. Consumer will not start.");
+            _logger.LogWarning(
+                "Kafka is disabled. Consumer will not start.");
             return;
         }
 
@@ -94,7 +95,8 @@ public class ReservationConsumer : BackgroundService
         if (string.IsNullOrWhiteSpace(bootstrapServers) ||
             string.IsNullOrWhiteSpace(topic))
         {
-            _logger.LogError("Kafka bootstrap server or topic is missing.");
+            _logger.LogError(
+                "Kafka bootstrap server or topic is missing.");
             return;
         }
 
@@ -116,7 +118,9 @@ public class ReservationConsumer : BackgroundService
             dlqProducer = _producerFactory.Create(bootstrapServers);
 
             consumer.Subscribe(topic);
-            _logger.LogInformation("Reservation consumer started.");
+
+            _logger.LogInformation(
+                "Reservation consumer started.");
 
             while (!stoppingToken.IsCancellationRequested)
             {
@@ -173,9 +177,7 @@ public class ReservationConsumer : BackgroundService
                             stoppingToken);
 
                         if (sentToDlq)
-                        {
                             consumer.Commit(result);
-                        }
 
                         continue;
                     }
@@ -189,10 +191,17 @@ public class ReservationConsumer : BackgroundService
                         await context.Database.BeginTransactionAsync(
                             stoppingToken);
 
+                    // Serialize processing of the same idempotency key.
+                    // UPDLOCK prevents another transaction from reading
+                    // the same record for concurrent modification.
+                    // HOLDLOCK keeps the lock until this transaction ends.
                     var idem = await context.Idempotencies
-                        .FirstOrDefaultAsync(
-                            x => x.Key == dto.IdempotencyKey,
-                            stoppingToken);
+                        .FromSqlInterpolated($"""
+                            SELECT *
+                            FROM [dbo].[Idempotencies] WITH (UPDLOCK, HOLDLOCK)
+                            WHERE [Key] = {dto.IdempotencyKey}
+                            """)
+                        .SingleOrDefaultAsync(stoppingToken);
 
                     if (idem == null)
                     {
@@ -209,9 +218,17 @@ public class ReservationConsumer : BackgroundService
                         continue;
                     }
 
+                    if (idem.Status != "PENDING")
+                    {
+                        throw new InvalidOperationException(
+                            $"Unexpected idempotency status: {idem.Status}");
+                    }
+
+                    // Acquire the room lock inside the same SQL transaction.
                     var connection = context.Database.GetDbConnection();
 
                     await using var command = connection.CreateCommand();
+
                     command.Transaction = context.Database
                         .CurrentTransaction!
                         .GetDbTransaction();
@@ -230,10 +247,14 @@ public class ReservationConsumer : BackgroundService
 
                     var resourceParameter = command.CreateParameter();
                     resourceParameter.ParameterName = "@resource";
-                    resourceParameter.Value = $"HotelReservation:Room:{dto.RoomId}";
+                    resourceParameter.Value =
+                        $"HotelReservation:Room:{dto.RoomId}";
+
                     command.Parameters.Add(resourceParameter);
 
-                    var lockResultObject = await command.ExecuteScalarAsync(stoppingToken);
+                    var lockResultObject =
+                        await command.ExecuteScalarAsync(stoppingToken);
+
                     var lockResult = Convert.ToInt32(lockResultObject);
 
                     if (lockResult < 0)
@@ -242,16 +263,58 @@ public class ReservationConsumer : BackgroundService
                             $"Could not acquire room lock. SQL result: {lockResult}");
                     }
 
-                    // Check overlapping reservations after acquiring the lock.
-                    var hasConflict = await context.Reservations.AnyAsync(x =>
-                        x.RoomId == dto.RoomId &&
-                        x.CheckInDate < dto.CheckOut &&
-                        x.CheckOutDate > dto.CheckIn,
+                    // Check room existence and active status after
+                    // acquiring the SQL Server room lock.
+                    var room = await context.Rooms
+                        .FirstOrDefaultAsync(
+                            x => x.Id == dto.RoomId,
+                            stoppingToken);
+
+                    if (room == null || !room.IsActive)
+                    {
+                        var errorCode = room == null
+                            ? "ROOM_NOT_FOUND"
+                            : "ROOM_INACTIVE";
+
+                        idem.Status = "FAILED";
+
+                        idem.Response = JsonSerializer.Serialize(new
+                        {
+                            code = errorCode,
+                            message = room == null
+                                ? "The requested room does not exist."
+                                : "The requested room is inactive.",
+                            roomId = dto.RoomId
+                        });
+
+                        await context.SaveChangesAsync(stoppingToken);
+                        await transaction.CommitAsync(stoppingToken);
+
+                        // Commit offset only after failure is durable.
+                        consumer.Commit(result);
+
+                        _logger.LogWarning(
+                            "Reservation rejected. Code: {Code}, RoomId: {RoomId}, Key: {Key}",
+                            errorCode,
+                            dto.RoomId,
+                            dto.IdempotencyKey);
+
+                        continue;
+                    }
+
+                    // Check overlapping reservations after acquiring
+                    // the room lock.
+                    var hasConflict = await context.Reservations.AnyAsync(
+                        x =>
+                            x.RoomId == dto.RoomId &&
+                            x.CheckInDate < dto.CheckOut &&
+                            x.CheckOutDate > dto.CheckIn,
                         stoppingToken);
 
                     if (hasConflict)
                     {
                         idem.Status = "FAILED";
+
                         idem.Response = JsonSerializer.Serialize(new
                         {
                             code = "ROOM_CONFLICT",
@@ -264,7 +327,6 @@ public class ReservationConsumer : BackgroundService
                         await context.SaveChangesAsync(stoppingToken);
                         await transaction.CommitAsync(stoppingToken);
 
-                        // The conflict result is now durably recorded.
                         consumer.Commit(result);
 
                         _logger.LogWarning(
@@ -284,6 +346,7 @@ public class ReservationConsumer : BackgroundService
                     });
 
                     idem.Status = "COMPLETED";
+
                     idem.Response = JsonSerializer.Serialize(new
                     {
                         message = "Reservation created successfully",
@@ -296,7 +359,7 @@ public class ReservationConsumer : BackgroundService
                     await context.SaveChangesAsync(stoppingToken);
                     await transaction.CommitAsync(stoppingToken);
 
-                    // Commit Kafka offset only after the database commit.
+                    // Commit Kafka offset only after DB commit.
                     consumer.Commit(result);
 
                     _logger.LogInformation(
@@ -305,7 +368,9 @@ public class ReservationConsumer : BackgroundService
                 }
                 catch (ConsumeException ex)
                 {
-                    _logger.LogError(ex, "Kafka consumption error.");
+                    _logger.LogError(
+                        ex,
+                        "Kafka consumption error.");
                 }
                 catch (OperationCanceledException)
                     when (stoppingToken.IsCancellationRequested)
@@ -326,7 +391,8 @@ public class ReservationConsumer : BackgroundService
             consumer.Close();
             dlqProducer?.Dispose();
 
-            _logger.LogInformation("Reservation consumer stopped.");
+            _logger.LogInformation(
+                "Reservation consumer stopped.");
         }
     }
 }

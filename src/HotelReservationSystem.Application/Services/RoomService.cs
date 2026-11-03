@@ -1,7 +1,9 @@
+
 using HotelReservationSystem.Application.DTOs;
 using HotelReservationSystem.Application.Interfaces;
 using HotelReservationSystem.Application.Interfaces.Repositories;
 using HotelReservationSystem.Domain.Entities;
+using HotelReservationSystem.Application.Enums;
 
 namespace HotelReservationSystem.Application.Services
 {
@@ -17,12 +19,14 @@ namespace HotelReservationSystem.Application.Services
         public async Task<List<RoomDto>> GetAllAsync()
         {
             var rooms = await _roomRepository.GetAllAsync();
+
             return rooms.Select(MapToDto).ToList();
         }
 
         public async Task<RoomDto?> GetByIdAsync(int id)
         {
             var room = await _roomRepository.GetByIdAsync(id);
+
             return room is null ? null : MapToDto(room);
         }
 
@@ -33,7 +37,8 @@ namespace HotelReservationSystem.Application.Services
                 Name = dto.Name.Trim(),
                 PricePerNight = dto.PricePerNight,
                 Capacity = dto.Capacity,
-                IsAvailable = dto.IsAvailable
+                IsAvailable = dto.IsAvailable,
+                IsActive = true
             };
 
             await _roomRepository.AddAsync(room);
@@ -61,17 +66,27 @@ namespace HotelReservationSystem.Application.Services
             return MapToDto(room);
         }
 
-        public async Task<bool> DeleteAsync(int id)
+        public async Task<RoomDto?> ActivateAsync(int id)
         {
-            var deleted = await _roomRepository.DeleteAsync(id);
+            var room = await _roomRepository.SetActiveWithLockAsync(
+                id,
+                true);
 
-            if (!deleted)
-            {
-                return false;
-            }
+            return room is null ? null : MapToDto(room);
+        }
 
-            await _roomRepository.SaveChangesAsync();
-            return true;
+        public async Task<RoomDto?> DeactivateAsync(int id)
+        {
+            var room = await _roomRepository.SetActiveWithLockAsync(
+                id,
+                false);
+
+            return room is null ? null : MapToDto(room);
+        }
+
+        public async Task<RoomDeletionResult> DeleteAsync(int id)
+        {
+            return await _roomRepository.DeleteAsync(id);
         }
 
         private static RoomDto MapToDto(Room room)
@@ -82,7 +97,8 @@ namespace HotelReservationSystem.Application.Services
                 Name = room.Name,
                 PricePerNight = room.PricePerNight,
                 Capacity = room.Capacity,
-                IsAvailable = room.IsAvailable
+                IsAvailable = room.IsAvailable,
+                IsActive = room.IsActive
             };
         }
     }

@@ -165,6 +165,11 @@ namespace HotelReservationSystem.Infrastructure.Migrations
                     b.Property<int>("Capacity")
                         .HasColumnType("int");
 
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true);
+
                     b.Property<bool>("IsAvailable")
                         .HasColumnType("bit");
 
