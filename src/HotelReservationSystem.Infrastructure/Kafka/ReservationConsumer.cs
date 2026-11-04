@@ -270,11 +270,13 @@ public class ReservationConsumer : BackgroundService
                             x => x.Id == dto.RoomId,
                             stoppingToken);
 
-                    if (room == null || !room.IsActive)
+                    if (room == null || !room.IsActive || !room.IsAvailable)
                     {
                         var errorCode = room == null
                             ? "ROOM_NOT_FOUND"
-                            : "ROOM_INACTIVE";
+                            : !room.IsActive
+                                ? "ROOM_INACTIVE"
+                                : "ROOM_UNAVAILABLE";
 
                         idem.Status = "FAILED";
 
@@ -283,7 +285,9 @@ public class ReservationConsumer : BackgroundService
                             code = errorCode,
                             message = room == null
                                 ? "The requested room does not exist."
-                                : "The requested room is inactive.",
+                                : !room.IsActive
+                                    ? "The requested room is inactive."
+                                    : "The requested room is unavailable.",
                             roomId = dto.RoomId
                         });
 
