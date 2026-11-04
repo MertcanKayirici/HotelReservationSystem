@@ -94,6 +94,9 @@ namespace HotelReservationSystem.Application.Services
                 if (!room.IsActive)
                     throw new Exception("ROOM_INACTIVE");
 
+                if (!room.IsAvailable)
+                    throw new Exception("ROOM_UNAVAILABLE");
+
                 _logger.Info("Inside UOW for {RoomId}", dto.RoomId);
 
                 try

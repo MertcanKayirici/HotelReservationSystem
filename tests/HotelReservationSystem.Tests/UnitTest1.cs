@@ -56,6 +56,10 @@ public class ReservationCoordinatorTests
             IdempotencyKey = "test-invalid-date"
         };
 
+        _uow
+    .Setup(x => x.ExecuteAsync(It.IsAny<Func<Task>>()))
+    .Returns(Task.CompletedTask);
+
         var exception = await Assert.ThrowsAsync<Exception>(
             () => coordinator.HandleAsync(dto));
 
@@ -471,6 +475,50 @@ public class ReservationCoordinatorTests
 
         _lock.Verify(
             x => x.ReleaseLockAsync("lock:room:999", "lock-token"),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task HandleAsync_WhenRoomIsUnavailable_ThrowsRoomUnavailable()
+    {
+        var coordinator = CreateCoordinator();
+
+        var dto = new CreateReservationDto
+        {
+            RoomId = 1,
+            UserId = 1,
+            CheckIn = new DateTime(2026, 11, 10),
+            CheckOut = new DateTime(2026, 11, 13),
+            IdempotencyKey = "unavailable-room-test"
+        };
+
+        _lock
+            .Setup(x => x.AcquireLockAsync(
+                It.IsAny<string>(),
+                It.IsAny<TimeSpan>()))
+            .ReturnsAsync((true, "lock-token"));
+
+        _roomRepository
+            .Setup(x => x.GetByIdAsync(1))
+            .ReturnsAsync(new Room
+            {
+                Id = 1,
+                Name = "Unavailable Room",
+                IsActive = true,
+                IsAvailable = false
+            });
+
+        var exception = await Assert.ThrowsAsync<Exception>(
+            () => coordinator.HandleAsync(dto));
+
+        Assert.Equal("ROOM_UNAVAILABLE", exception.Message);
+
+        _uow.Verify(
+            x => x.ExecuteAsync(It.IsAny<Func<Task>>()),
+            Times.Never);
+
+        _lock.Verify(
+            x => x.ReleaseLockAsync("lock:room:1", "lock-token"),
             Times.Once);
     }
 }
