@@ -1,10 +1,12 @@
 using System.ComponentModel.DataAnnotations;
+using HotelReservationSystem.Application.Validation;
 
 namespace HotelReservationSystem.Application.DTOs
 {
     public class UpdateRoomDto
     {
         [Required]
+        [RoomName]
         [MaxLength(100)]
         public string Name { get; set; } = string.Empty;
 
