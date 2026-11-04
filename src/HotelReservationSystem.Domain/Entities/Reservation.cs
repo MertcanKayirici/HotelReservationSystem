@@ -16,6 +16,8 @@
         /// </summary>
         public int RoomId { get; set; }
 
+        public Room Room { get; set; } = null!;
+
         /// <summary>
         /// Identifier of the user who made the reservation.
         /// </summary>

@@ -13,5 +13,7 @@ namespace HotelReservationSystem.Domain.Entities
         public bool IsAvailable { get; set; } = true;
 
         public bool IsActive { get; set; } = true;
+
+        public ICollection<Reservation> Reservations { get; set; } = new List<Reservation>();
     }
 }
