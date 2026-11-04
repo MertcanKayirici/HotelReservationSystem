@@ -1,4 +1,6 @@
+
 using HotelReservationSystem.Application.DTOs;
+using HotelReservationSystem.Application.Enums;
 using HotelReservationSystem.Application.Interfaces;
 using Microsoft.AspNetCore.Mvc;
 
@@ -63,12 +65,12 @@ namespace HotelReservationSystem.API.Controllers
             return Ok(room);
         }
 
-        [HttpDelete("{id:int}")]
-        public async Task<IActionResult> Delete(int id)
+        [HttpPatch("{id:int}/activate")]
+        public async Task<IActionResult> Activate(int id)
         {
-            var deleted = await _roomService.DeleteAsync(id);
+            var room = await _roomService.ActivateAsync(id);
 
-            if (!deleted)
+            if (room is null)
             {
                 return NotFound(new
                 {
@@ -77,7 +79,57 @@ namespace HotelReservationSystem.API.Controllers
                 });
             }
 
-            return NoContent();
+            return Ok(room);
+        }
+
+        [HttpPatch("{id:int}/deactivate")]
+        public async Task<IActionResult> Deactivate(int id)
+        {
+            var room = await _roomService.DeactivateAsync(id);
+
+            if (room is null)
+            {
+                return NotFound(new
+                {
+                    code = "ROOM_NOT_FOUND",
+                    message = "Room not found."
+                });
+            }
+
+            return Ok(room);
+        }
+
+        [HttpDelete("{id:int}")]
+        public async Task<IActionResult> Delete(int id)
+        {
+            var result = await _roomService.DeleteAsync(id);
+
+            switch (result)
+            {
+                case RoomDeletionResult.Deleted:
+                    return NoContent();
+
+                case RoomDeletionResult.NotFound:
+                    return NotFound(new
+                    {
+                        code = "ROOM_NOT_FOUND",
+                        message = "Room not found."
+                    });
+
+                case RoomDeletionResult.HasDependencies:
+                    return Conflict(new
+                    {
+                        code = "ROOM_HAS_DEPENDENCIES",
+                        message = "Room cannot be deleted because related records exist."
+                    });
+
+                default:
+                    return StatusCode(500, new
+                    {
+                        code = "ROOM_DELETION_FAILED",
+                        message = "An unexpected error occurred while deleting the room."
+                    });
+            }
         }
     }
 }

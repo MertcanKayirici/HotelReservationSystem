@@ -1,11 +1,12 @@
 ﻿
+using HotelReservationSystem.Application.Common;
 using HotelReservationSystem.Application.DTOs;
 using HotelReservationSystem.Application.Interfaces;
 using HotelReservationSystem.Application.Interfaces.Repositories;
 using HotelReservationSystem.Application.Services;
+using HotelReservationSystem.Domain.Entities;
 using Moq;
 using Xunit;
-using HotelReservationSystem.Application.Common;
 
 namespace HotelReservationSystem.Tests;
 
@@ -15,6 +16,7 @@ public class ReservationCoordinatorTests
     private readonly Mock<IOutboxService> _outbox = new();
     private readonly Mock<IRedisLockService> _lock = new();
     private readonly Mock<IReservationRepository> _reservationRepository = new();
+    private readonly Mock<IRoomRepository> _roomRepository = new();
     private readonly Mock<IUnitOfWork> _uow = new();
     private readonly Mock<IAppLogger> _logger = new();
 
@@ -24,8 +26,21 @@ public class ReservationCoordinatorTests
             _outbox.Object,
             _lock.Object,
             _reservationRepository.Object,
+            _roomRepository.Object,
             _uow.Object,
             _logger.Object);
+
+    private void SetupActiveRoom()
+    {
+        _roomRepository
+            .Setup(x => x.GetByIdAsync(It.IsAny<int>()))
+            .ReturnsAsync(new Room
+            {
+                Id = 1,
+                Name = "Test Room",
+                IsActive = true
+            });
+    }
 
     [Fact]
     public async Task HandleAsync_WhenCheckOutIsBeforeCheckIn_ThrowsInvalidDateRange()
@@ -45,6 +60,7 @@ public class ReservationCoordinatorTests
             () => coordinator.HandleAsync(dto));
 
         Assert.Equal("INVALID_DATE_RANGE", exception.Message);
+
         _lock.Verify(
             x => x.AcquireLockAsync(It.IsAny<string>(), It.IsAny<TimeSpan>()),
             Times.Never);
@@ -68,16 +84,15 @@ public class ReservationCoordinatorTests
             () => coordinator.HandleAsync(dto));
 
         Assert.Equal("IDEMPOTENCY_KEY_REQUIRED", exception.Message);
+
         _lock.Verify(
             x => x.AcquireLockAsync(It.IsAny<string>(), It.IsAny<TimeSpan>()),
             Times.Never);
     }
 
-
     [Fact]
     public async Task HandleAsync_WhenSameKeyHasDifferentRequest_ThrowsConflict()
     {
-        // Arrange
         const string key = "same-key-test";
 
         var coordinator = CreateCoordinator();
@@ -90,7 +105,7 @@ public class ReservationCoordinatorTests
 
         _idempotency
             .Setup(x => x.GetAsync(key))
-            .ReturnsAsync(new HotelReservationSystem.Domain.Entities.Idempotency
+            .ReturnsAsync(new Idempotency
             {
                 Key = key,
                 Status = "PENDING",
@@ -108,11 +123,9 @@ public class ReservationCoordinatorTests
             IdempotencyKey = key
         };
 
-        // Act
         var exception = await Assert.ThrowsAsync<Exception>(
             () => coordinator.HandleAsync(dto));
 
-        // Assert
         Assert.Equal("IDEMPOTENCY_KEY_CONFLICT", exception.Message);
 
         _uow.Verify(
@@ -124,12 +137,11 @@ public class ReservationCoordinatorTests
             Times.Once);
     }
 
-
     [Fact]
     public async Task HandleAsync_WhenSameKeyAndSameRequestIsPending_ThrowsInProgress()
     {
-        // Arrange
         const string key = "same-key-pending-test";
+
         var coordinator = CreateCoordinator();
 
         var dto = new CreateReservationDto
@@ -157,7 +169,7 @@ public class ReservationCoordinatorTests
 
         _idempotency
             .Setup(x => x.GetAsync(key))
-            .ReturnsAsync(new HotelReservationSystem.Domain.Entities.Idempotency
+            .ReturnsAsync(new Idempotency
             {
                 Key = key,
                 Status = "PENDING",
@@ -166,11 +178,9 @@ public class ReservationCoordinatorTests
                 CreatedAt = DateTime.UtcNow
             });
 
-        // Act
         var exception = await Assert.ThrowsAsync<Exception>(
             () => coordinator.HandleAsync(dto));
 
-        // Assert
         Assert.Equal("IN_PROGRESS", exception.Message);
 
         _uow.Verify(
@@ -182,11 +192,11 @@ public class ReservationCoordinatorTests
             Times.Once);
     }
 
-
     [Fact]
     public async Task HandleAsync_WhenSameKeyAndSameRequestIsCompleted_ThrowsAlreadyCompleted()
     {
         const string key = "same-key-completed-test";
+
         var coordinator = CreateCoordinator();
 
         var dto = new CreateReservationDto
@@ -214,7 +224,7 @@ public class ReservationCoordinatorTests
 
         _idempotency
             .Setup(x => x.GetAsync(key))
-            .ReturnsAsync(new HotelReservationSystem.Domain.Entities.Idempotency
+            .ReturnsAsync(new Idempotency
             {
                 Key = key,
                 Status = "COMPLETED",
@@ -237,11 +247,12 @@ public class ReservationCoordinatorTests
             Times.Once);
     }
 
-
     [Fact]
     public async Task HandleAsync_WhenUnitOfWorkFails_ReleasesRoomLock()
     {
         var coordinator = CreateCoordinator();
+
+        SetupActiveRoom();
 
         var dto = new CreateReservationDto
         {
@@ -260,7 +271,7 @@ public class ReservationCoordinatorTests
 
         _idempotency
             .Setup(x => x.GetAsync(dto.IdempotencyKey))
-            .ReturnsAsync((HotelReservationSystem.Domain.Entities.Idempotency?)null);
+            .ReturnsAsync((Idempotency?)null);
 
         _uow
             .Setup(x => x.ExecuteAsync(It.IsAny<Func<Task>>()))
@@ -275,7 +286,6 @@ public class ReservationCoordinatorTests
             x => x.ReleaseLockAsync("lock:room:1", "lock-token"),
             Times.Once);
     }
-
 
     [Fact]
     public async Task HandleAsync_WhenRoomLockCannotBeAcquired_ThrowsRoomLocked()
@@ -317,12 +327,14 @@ public class ReservationCoordinatorTests
             Times.Never);
     }
 
-
     [Fact]
     public async Task HandleAsync_WhenIdempotencyKeyRaceOccurs_UsesExistingRecord()
     {
         const string key = "idempotency-race-test";
+
         var coordinator = CreateCoordinator();
+
+        SetupActiveRoom();
 
         var dto = new CreateReservationDto
         {
@@ -341,7 +353,7 @@ public class ReservationCoordinatorTests
             dto.CheckOut
         });
 
-        var existingRecord = new HotelReservationSystem.Domain.Entities.Idempotency
+        var existingRecord = new Idempotency
         {
             Key = key,
             Status = "PENDING",
@@ -358,7 +370,7 @@ public class ReservationCoordinatorTests
 
         _idempotency
             .SetupSequence(x => x.GetAsync(key))
-            .ReturnsAsync((HotelReservationSystem.Domain.Entities.Idempotency?)null)
+            .ReturnsAsync((Idempotency?)null)
             .ReturnsAsync(existingRecord);
 
         _uow
@@ -372,10 +384,93 @@ public class ReservationCoordinatorTests
 
         Assert.Equal("IN_PROGRESS", exception.Message);
 
-        _idempotency.Verify(x => x.GetAsync(key), Times.Exactly(2));
+        _idempotency.Verify(
+            x => x.GetAsync(key),
+            Times.Exactly(2));
 
         _lock.Verify(
             x => x.ReleaseLockAsync("lock:room:1", "lock-token"),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task HandleAsync_WhenRoomIsInactive_ThrowsRoomInactive()
+    {
+        var coordinator = CreateCoordinator();
+
+        var dto = new CreateReservationDto
+        {
+            RoomId = 1,
+            UserId = 1,
+            CheckIn = new DateTime(2026, 11, 10),
+            CheckOut = new DateTime(2026, 11, 13),
+            IdempotencyKey = "inactive-room-test"
+        };
+
+        _lock
+            .Setup(x => x.AcquireLockAsync(
+                It.IsAny<string>(),
+                It.IsAny<TimeSpan>()))
+            .ReturnsAsync((true, "lock-token"));
+
+        _roomRepository
+            .Setup(x => x.GetByIdAsync(1))
+            .ReturnsAsync(new Room
+            {
+                Id = 1,
+                Name = "Inactive Room",
+                IsActive = false
+            });
+
+        var exception = await Assert.ThrowsAsync<Exception>(
+            () => coordinator.HandleAsync(dto));
+
+        Assert.Equal("ROOM_INACTIVE", exception.Message);
+
+        _uow.Verify(
+            x => x.ExecuteAsync(It.IsAny<Func<Task>>()),
+            Times.Never);
+
+        _lock.Verify(
+            x => x.ReleaseLockAsync("lock:room:1", "lock-token"),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task HandleAsync_WhenRoomDoesNotExist_ThrowsRoomNotFound()
+    {
+        var coordinator = CreateCoordinator();
+
+        var dto = new CreateReservationDto
+        {
+            RoomId = 999,
+            UserId = 1,
+            CheckIn = new DateTime(2026, 11, 10),
+            CheckOut = new DateTime(2026, 11, 13),
+            IdempotencyKey = "missing-room-test"
+        };
+
+        _lock
+            .Setup(x => x.AcquireLockAsync(
+                It.IsAny<string>(),
+                It.IsAny<TimeSpan>()))
+            .ReturnsAsync((true, "lock-token"));
+
+        _roomRepository
+            .Setup(x => x.GetByIdAsync(999))
+            .ReturnsAsync((Room?)null);
+
+        var exception = await Assert.ThrowsAsync<Exception>(
+            () => coordinator.HandleAsync(dto));
+
+        Assert.Equal("ROOM_NOT_FOUND", exception.Message);
+
+        _uow.Verify(
+            x => x.ExecuteAsync(It.IsAny<Func<Task>>()),
+            Times.Never);
+
+        _lock.Verify(
+            x => x.ReleaseLockAsync("lock:room:999", "lock-token"),
             Times.Once);
     }
 }

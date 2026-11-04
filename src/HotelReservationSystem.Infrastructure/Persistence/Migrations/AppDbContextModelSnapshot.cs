@@ -151,7 +151,9 @@ namespace HotelReservationSystem.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Reservations");
+                    b.HasIndex("RoomId");
+
+                    b.ToTable("Reservations", (string)null);
                 });
 
             modelBuilder.Entity("HotelReservationSystem.Domain.Entities.Room", b =>
@@ -164,6 +166,11 @@ namespace HotelReservationSystem.Infrastructure.Migrations
 
                     b.Property<int>("Capacity")
                         .HasColumnType("int");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true);
 
                     b.Property<bool>("IsAvailable")
                         .HasColumnType("bit");
@@ -221,6 +228,22 @@ namespace HotelReservationSystem.Infrastructure.Migrations
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("HotelReservationSystem.Domain.Entities.Reservation", b =>
+                {
+                    b.HasOne("HotelReservationSystem.Domain.Entities.Room", "Room")
+                        .WithMany("Reservations")
+                        .HasForeignKey("RoomId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Room");
+                });
+
+            modelBuilder.Entity("HotelReservationSystem.Domain.Entities.Room", b =>
+                {
+                    b.Navigation("Reservations");
                 });
 #pragma warning restore 612, 618
         }
